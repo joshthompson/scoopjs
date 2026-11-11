@@ -1,0 +1,47 @@
+{
+	"name": "scoopjs",
+	"version": "0.1.0",
+	"description": "A game engine where SolidJS components are the game objects",
+	"keywords": ["solid", "solidjs", "game", "engine", "sprite"],
+	"license": "MIT",
+	"author": "Josh Thompson",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/joshthompson/scoopjs.git",
+		"directory": "packages/core"
+	},
+	"type": "module",
+	"sideEffects": false,
+	"files": ["dist"],
+	"main": "./dist/index.js",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"solid": "./dist/index.jsx",
+			"import": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	},
+	"scripts": {
+		"build": "tsup",
+		"test": "vitest run",
+		"typecheck": "tsc -p tsconfig.json"
+	},
+	"peerDependencies": {
+		"solid-js": "^1.9.0"
+	},
+	"devDependencies": {
+		"jsdom": "^31.0.0",
+		"solid-js": "^1.9.5",
+		"tsup": "^8.5.1",
+		"tsup-preset-solid": "^2.2.0",
+		"typescript": "^5.9.3",
+		"vitest": "^5.1.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

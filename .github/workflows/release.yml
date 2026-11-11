@@ -1,0 +1,47 @@
+name: Release
+
+# On every push to main: opens (or updates) the "Version Packages" PR while
+# there are changesets waiting, and publishes to npm once that PR is merged.
+#
+# Publishes with npm trusted publishing (OIDC), so there's no npm token
+# anywhere. Each package has to exist on npm before it can be given a trusted
+# publisher, so a new package's first version is published by hand: see
+# plan.md, "Publishing".
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      # Node 24 comes with npm 11, which trusted publishing needs (11.5.1 or
+      # later). No `registry-url`: the `.npmrc` it writes expects a token.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Nothing goes out that CI wouldn't pass.
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          publish: pnpm release
+          title: Version Packages
+          commit: Version Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

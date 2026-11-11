@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"jsx": "preserve",
+		"jsxImportSource": "solid-js",
+		"esModuleInterop": true,
+		"isolatedModules": true,
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true
+	}
+}
