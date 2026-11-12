@@ -22,6 +22,8 @@ export interface CanvasProps {
 	scene: Scene
 	loading?: Component<{ scene: Scene }>
 	dialog?: Component<{ scene: Scene }>
+	/** Drawn over the sprites, but under the `dialog`. */
+	underDialog?: JSX.Element
 	overlay?: JSX.Element
 	underlay?: JSX.Element
 	/** After the canvas's own styles: its background is white unless set here. */
@@ -78,16 +80,31 @@ export function Canvas(props: CanvasProps) {
 	})
 
 	const sprites = () => {
-		const assetOrder = props.scene.options.assetOrder?.flat() ?? []
+		// Where each type first comes in `assetOrder`, looked up once rather
+		// than searched for on every comparison.
+		const assetOrder = new Map<string, number>()
+		for (const [index, type] of (
+			props.scene.options.assetOrder?.flat() ?? []
+		).entries()) {
+			if (!assetOrder.has(type)) assetOrder.set(type, index)
+		}
+		const priority = (type: string) => assetOrder.get(type) ?? -1
 		return props.scene.controllers
 			.get()
 			.map(({ controller }) => controller)
-			.toSorted((a, b) => {
-				const aP = assetOrder.findIndex((type) => type === a.type)
-				const bP = assetOrder.findIndex((type) => type === b.type)
-				return bP - aP
-			})
+			.toSorted((a, b) => priority(b.type) - priority(a.type))
 	}
+
+	const drawn = () => (
+		<For each={sprites()}>
+			{(controller) => (
+				<ControllerSprite
+					controller={controller}
+					active={props.scene.isActive()}
+				/>
+			)}
+		</For>
+	)
 
 	const getMousePosition = (event: MouseEvent | TouchEvent) => {
 		const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
@@ -143,14 +160,23 @@ export function Canvas(props: CanvasProps) {
 				onMouseUp={handleMouseUp}
 			>
 				{props.underlay}
-				<For each={sprites()}>
-					{(controller) => (
-						<ControllerSprite
-							controller={controller}
-							active={props.scene.isActive()}
-						/>
-					)}
-				</For>
+				{props.scene.options.cameraLayer ? (
+					// The camera moves this one layer (see `cameraLayer`)
+					<div
+						style={{
+							position: 'absolute',
+							top: 0,
+							left: 0,
+							'pointer-events': 'none',
+							transform: `translate(${-props.scene.canvas.get().x()}px, ${-props.scene.canvas.get().y()}px)`,
+						}}
+					>
+						{drawn()}
+					</div>
+				) : (
+					drawn()
+				)}
+				{props.underDialog}
 				{props.dialog && <props.dialog scene={props.scene} />}
 				{props.scene.modal.get() && <Modal>{props.scene.modal.get()}</Modal>}
 				{props.overlay}

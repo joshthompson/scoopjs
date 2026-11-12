@@ -265,6 +265,9 @@ export function createConnectedController<
 	onEnterFrame?: ControllerProps<
 		ExtractControllerType<Controller<T & ControllerBaseType>>
 	>['onEnterFrame']
+	onMount?: ControllerProps<
+		ExtractControllerType<Controller<T & ControllerBaseType>>
+	>['onMount']
 	frame?: ($: ExtractControllerType<C>) => number
 	style?: ($: ExtractControllerType<C>) => JSX.CSSProperties
 	randomStartFrame?: boolean
@@ -306,5 +309,6 @@ export function createConnectedController<
 			}
 		},
 		onEnterFrame: options.onEnterFrame,
+		onMount: options.onMount,
 	})
 }

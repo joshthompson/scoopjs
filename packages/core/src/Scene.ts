@@ -39,6 +39,27 @@ export interface SceneOptions {
 	 * say. Can read signals: sprites follow whatever it returns.
 	 */
 	resolveAsset?: (url: string) => string
+	/**
+	 * Moves one layer of the canvas by the camera, rather than every sprite:
+	 * cheaper with a lot of sprites, since a sprite then only restyles when it
+	 * moves itself. The layer is a stacking context, so a sprite's `z-index`
+	 * only orders it among the other sprites, never over the canvas's
+	 * `overlay`. Off by default.
+	 */
+	cameraLayer?: boolean
+	/**
+	 * Keeps every image a sprite switches between painted, invisibly, so
+	 * switching to one doesn't flash blank while a big image decodes for the
+	 * first time. Costs a layer per extra image. Off by default.
+	 */
+	standbyFrames?: boolean
+	/**
+	 * What sprites step through their frames on. `'tick'` (the default) is the
+	 * scene's tick, so a sprite changes frame in the same update as it moves.
+	 * `'display'` is the screen's own refresh, timed to the millisecond, for
+	 * frame intervals that aren't a whole number of ticks.
+	 */
+	frameClock?: 'tick' | 'display'
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
@@ -53,12 +74,13 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	 */
 	tickers = new Set<() => void>()
 	/**
-	 * Every controller, the attached ones too, and the same again by type.
-	 * Looked up many times a tick, but only worked out again when a controller
-	 * is added, removed or attached.
+	 * Every controller, the attached ones too, and the same again by id and by
+	 * type. Looked up many times a tick, but only worked out again when a
+	 * controller is added, removed or attached.
 	 */
 	private lookup: Accessor<{
 		all: AnyController[]
+		byId: Map<string, AnyController>
 		byType: Map<string, AnyController[]>
 	}>
 	private disposeLookup: () => void
@@ -82,13 +104,16 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			memo: createMemo(() => {
 				const top = this.controllers.get().map((c) => c.controller)
 				const all = [...top, ...top.flatMap((c) => c.childControllers())]
+				const byId = new Map<string, AnyController>()
 				const byType = new Map<string, AnyController[]>()
 				for (const controller of all) {
+					// The first with an id, as a search through them would find
+					if (!byId.has(controller.id)) byId.set(controller.id, controller)
 					const ofType = byType.get(controller.type)
 					if (ofType) ofType.push(controller)
 					else byType.set(controller.type, [controller])
 				}
-				return { all, byType }
+				return { all, byId, byType }
 			}),
 		}))
 		this.lookup = lookup.memo
@@ -124,13 +149,15 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	}
 
 	addController(...controllers: (C | undefined)[]) {
+		const added: CanvasControllers = []
 		for (const controller of controllers) {
 			if (!controller) continue
 			controller.setGame(this)
-			this.controllers.set([
-				...this.controllers.get(),
-				{ id: controller.id, controller },
-			])
+			added.push({ id: controller.id, controller })
+		}
+		// All at once, so the lookups are worked out once, not once for each
+		if (added.length) {
+			this.controllers.set([...this.controllers.get(), ...added])
 		}
 	}
 
@@ -147,7 +174,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 	getControllerById<T = Controller<any>>(id: string) {
-		return this.getAllControllers().find((c) => c.id === id) as T | undefined
+		return this.lookup().byId.get(id) as T | undefined
 	}
 
 	/** Shared between callers, so don't change the array you get back. */

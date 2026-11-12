@@ -82,8 +82,11 @@ describe('blockBySolidsRectPlayer', () => {
 	it('lets a move through when nothing is in the way', () => {
 		const data = mover(0, 0, [wall], 4)
 		data.setX?.(5)
+		data.setY?.(3)
 		blockBySolidsRectPlayer(data, 0, 0)
-		expect(data.x()).toBeCloseTo(5, 2)
+		// All of it, not most of it
+		expect(data.x()).toBe(5)
+		expect(data.y()).toBe(3)
 	})
 
 	it('stops a rect at the wall with its far side, not its corner', () => {

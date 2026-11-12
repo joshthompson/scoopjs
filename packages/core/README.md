@@ -80,6 +80,16 @@ export const Game = () => <Canvas scene={scene} />
   actually show, such as a seasonal version of it.
 - **`--scoopjs-modal-backdrop`** is the CSS colour behind `scene.modal`. Set it
   on your canvas (`transparent` for none).
+- **`cameraLayer`** (on `Scene`) moves one layer by the camera instead of every
+  sprite, which is cheaper with a lot of sprites. A sprite's `z-index` then only
+  orders it among the other sprites.
+- **`standbyFrames`** (on `Scene`) keeps every image a sprite switches between
+  painted, so switching to one doesn't flash blank while it decodes.
+- **`frameClock`** (on `Scene`) is what sprites step through their frames on:
+  the scene's tick (`'tick'`, the default) or the screen's refresh
+  (`'display'`), for frame intervals that aren't a whole number of ticks.
+- **`underDialog`** (on `Canvas`) is drawn over the sprites but under the
+  `dialog`.
 
 ## Building with Vite
 

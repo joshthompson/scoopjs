@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { createEffect, createRoot, createSignal } from 'solid-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type ControllerBaseType, createController } from '../src/Controller'
 import { Scene } from '../src/Scene'
@@ -92,6 +92,27 @@ describe('Scene', () => {
 		const s = await scene(a)
 		expect(s.getControllerById('child')).toBe(child)
 		expect(s.getControllersByType('walker')).toEqual([a, child])
+		s.destroy()
+	})
+
+	it('finds the first controller with an id, and follows removals', async () => {
+		const first = walker('same')
+		const second = walker('same')
+		const s = await scene(first, second)
+		expect(s.getControllerById('same')).toBe(first)
+		s.removeController('same')
+		expect(s.getControllerById('same')).toBeUndefined()
+		expect(s.getControllerById('nobody')).toBeUndefined()
+		s.destroy()
+	})
+
+	it('adds several controllers in one go, skipping missing ones', async () => {
+		const s = await scene()
+		const seen: number[] = []
+		createRoot(() => createEffect(() => seen.push(s.controllers.get().length)))
+		s.addController(walker('a'), undefined, walker('b'))
+		expect(seen).toEqual([0, 2])
+		expect(s.getControllerById('b')?.data.scene).toBe(s)
 		s.destroy()
 	})
 

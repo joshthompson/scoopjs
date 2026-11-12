@@ -143,6 +143,10 @@ export function blockBySolidsRectPlayer(
 		}
 	}
 
+	// Nothing in the way: the move stands as it is. Otherwise every free move
+	// would come up short by the margin below, and set the position for nothing.
+	if (tMin === 1) return
+
 	const safeT = Math.max(0, tMin - 0.0001)
 
 	// Move up to collision

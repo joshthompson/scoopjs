@@ -1,8 +1,10 @@
 import {
 	type Accessor,
 	type Component,
+	For,
 	Index,
 	type JSX,
+	batch,
 	createEffect,
 	createMemo,
 	createSignal,
@@ -49,6 +51,26 @@ export interface Sprite {
 	controllers?: Accessor<Controller<any>[]>
 }
 
+// One clock for every sprite on `frameClock: 'display'`, rather than a timer
+// each, so frame changes are written together just before the browser paints.
+const animations = new Set<(now: number) => void>()
+let animationFrame: number | undefined
+
+function tickAnimations(now: number) {
+	batch(() => {
+		for (const animate of animations) animate(now)
+	})
+	animationFrame = animations.size
+		? requestAnimationFrame(tickAnimations)
+		: undefined
+}
+
+function addAnimation(animate: (now: number) => void) {
+	animations.add(animate)
+	animationFrame ??= requestAnimationFrame(tickAnimations)
+	return () => animations.delete(animate)
+}
+
 interface SpriteExtendedProps {
 	active?: boolean
 	id?: string
@@ -90,6 +112,14 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 		}),
 	)
 
+	// With `standbyFrames`, a sprite that switches between separate images
+	// keeps them all painted, invisibly, so switching doesn't flash blank.
+	const standbyImages = createMemo(() => {
+		if (!scene.options.standbyFrames) return []
+		const images = [...new Set(frames().map((frame) => frame.image))]
+		return images.length > 1 ? images : []
+	})
+
 	const frameStyle = createMemo(() => {
 		const frame = frames()[currentFrame()]
 		if (!frame) return {}
@@ -101,32 +131,52 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 		}
 	})
 
-	// Stepped through on the scene's tick, so a sprite changes frame in the same
-	// update as it moves. The time a frame's been showing carries over from tick
-	// to tick, so a frame interval that isn't a whole number of ticks still
-	// comes out right on average.
-	let shown = 0
-	const animate = () => {
-		if (
-			props.active === false ||
-			props.state !== 'play' ||
-			!props.frames.length
+	const frameInterval = () =>
+		typeof props.frameInterval === 'function'
+			? props.frameInterval()
+			: (props.frameInterval ?? 100)
+	const canAnimate = () =>
+		props.active !== false && props.state === 'play' && !!props.frames.length
+
+	if (scene.options.frameClock === 'display') {
+		// On the screen's refresh, a step as soon as it mounts, and then one
+		// whenever a frame is due. Each step is timed from when the frame was
+		// due, so intervals don't round up to the display's own rate.
+		const step = () => {
+			if (canAnimate()) {
+				setCurrentFrame((prev) => (prev + 1) % props.frames.length)
+			}
+		}
+		step()
+		let nextFrameAt = performance.now() + frameInterval()
+		onCleanup(
+			addAnimation((now) => {
+				if (now < nextFrameAt) return
+				step()
+				nextFrameAt = Math.max(nextFrameAt + frameInterval(), now)
+			}),
 		)
-			return
-		const interval =
-			typeof props.frameInterval === 'function'
-				? props.frameInterval()
-				: (props.frameInterval ?? 100)
-		// An infinite interval is a sprite that never changes frame, like the
-		// scenery.
-		if (!Number.isFinite(interval) || interval <= 0) return
-		shown += scene.frameRate
-		const steps = Math.floor(shown / interval)
-		if (!steps) return
-		shown -= steps * interval
-		setCurrentFrame((prev) => (prev + steps) % props.frames.length)
+	} else {
+		// Stepped through on the scene's tick, so a sprite changes frame in the
+		// same update as it moves. The time a frame's been showing carries over
+		// from tick to tick, so a frame interval that isn't a whole number of
+		// ticks still comes out right on average.
+		let shown = 0
+		const animate = () => {
+			if (!canAnimate()) return
+			const interval = frameInterval()
+			// An infinite interval is a sprite that never changes frame, like the
+			// scenery.
+			if (!Number.isFinite(interval) || interval <= 0) return
+			shown += scene.frameRate
+			const steps = Math.floor(shown / interval)
+			if (!steps) return
+			shown -= steps * interval
+			setCurrentFrame((prev) => (prev + steps) % props.frames.length)
+		}
+		scene.tickers.add(animate)
+		onCleanup(() => scene.tickers.delete(animate))
 	}
-	scene.tickers.add(animate)
 
 	// The same children from one move to the next, so they're only drawn again
 	// when they're swapped for others, or when a function's signals change.
@@ -137,17 +187,26 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 	}
 
 	onMount(() => props.onMount?.({ $ref: ref }))
-	onCleanup(() => scene.tickers.delete(animate))
 
-	const top = createMemo(() => {
-		if (props.fixed) return `${props.y}px`
-		return `${props.y - 0 * (props.parallax ?? 1)}px`
-	})
-
-	const left = createMemo(() => {
-		if (props.fixed) return `${props.x}px`
-		return `${props.x - scene.canvas.get().x() * (props.parallax ?? 1)}px`
-	})
+	// Where the camera leaves a sprite. Attached sprites (`fixed`) move with
+	// whatever carries them. With a `cameraLayer` the layer has moved by the
+	// camera already, so only a sprite with parallax needs to move again. The
+	// camera is only read when it's needed, so a sprite it doesn't move isn't
+	// worked out again every time the camera moves.
+	const offset = (camera: () => number) => {
+		const parallax = props.parallax ?? 1
+		if (props.fixed) return 0
+		if (scene.options.cameraLayer) {
+			return parallax === 1 ? 0 : camera() * (parallax - 1)
+		}
+		return camera() * parallax
+	}
+	const top = createMemo(
+		() => `${props.y - offset(() => scene.canvas.get().y())}px`,
+	)
+	const left = createMemo(
+		() => `${props.x - offset(() => scene.canvas.get().x())}px`,
+	)
 
 	return (
 		<div
@@ -192,6 +251,13 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 			>
 				{content()}
 			</div>
+			<For each={standbyImages()}>
+				{(image) => (
+					<div
+						style={{ ...styles.standby, 'background-image': `url(${image})` }}
+					/>
+				)}
+			</For>
 			<Index each={props.controllers?.() ?? []}>
 				{(controller) => (
 					<ControllerSprite
@@ -226,3 +292,15 @@ export function ControllerSprite(props: {
 		/>
 	)
 }
+
+const styles = {
+	standby: {
+		position: 'absolute',
+		inset: 0,
+		'background-size': '100% 100%',
+		opacity: 0,
+		// Keeps it rasterised, so the browser doesn't skip decoding it
+		'will-change': 'opacity',
+		'pointer-events': 'none',
+	},
+} satisfies Record<string, JSX.CSSProperties>
