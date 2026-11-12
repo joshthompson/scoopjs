@@ -1,6 +1,6 @@
 # Plugins are built on Core's API, not registered with it
 
-A Plugin is its own `@scoopjs/*` package that a game calls directly, such as `const sounds = createSounds(scene, {...})` or `<Debugger scene={scene} />`. Core has no list of plugins, no `plugins: [...]` option on a Scene, and no lifecycle for them. When a Plugin needs a hook Core doesn't have yet, Core gains that hook as ordinary public API that any game could use too.
+A Plugin is a package of its own that a game calls directly, such as `const sounds = createSounds(scene, {...})` or `<Debugger scene={scene} />`. Core has no list of plugins, no `plugins: [...]` option on a Scene, and no lifecycle for them. When a Plugin needs a hook Core doesn't have yet, Core gains that hook as ordinary public API that any game could use too.
 
 ## Considered Options
 
@@ -9,4 +9,4 @@ A Plugin is its own `@scoopjs/*` package that a game calls directly, such as `co
 ## Consequences
 
 - If three or more Plugins end up wanting the same hook in the same way, that's the time to think about a registry again.
-- Each Plugin lists `scoopjs` and `solid-js` as peer dependencies, so a game and all its Plugins share one Core and one Solid.
+- Each Plugin lists Core and `solid-js` as peer dependencies, so a game and all its Plugins share one Core and one Solid.

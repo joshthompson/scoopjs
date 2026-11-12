@@ -7,9 +7,20 @@ draw loop of its own: Solid's reactivity does the drawing.
 
 Pre-1.0: any minor version can break the API.
 
-```sh
-pnpm add scoopjs solid-js
+For now it's on GitHub Packages, as `@joshthompson/scoopjs`. Install it under
+the name `scoopjs`, so imports stay the same when it moves to npm:
+
+```ini
+# .npmrc, next to your package.json
+@joshthompson:registry=https://npm.pkg.github.com
 ```
+
+```sh
+pnpm add scoopjs@npm:@joshthompson/scoopjs solid-js
+```
+
+GitHub Packages needs a token even to install. It goes in `~/.npmrc` as
+`//npm.pkg.github.com/:_authToken=…`, from a token with `read:packages`.
 
 ```tsx
 import { Canvas, Key, Scene, createController } from 'scoopjs'

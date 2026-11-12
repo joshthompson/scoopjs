@@ -5,9 +5,9 @@ Extracted from the [Scoop Bus Run Club](https://scoopbus.run) games.
 
 | Package | What it is |
 |---|---|
-| [`scoopjs`](packages/core) | Core: Scene, Controller, Sprite, Canvas and collision |
+| [`@joshthompson/scoopjs`](packages/core) | Core: Scene, Controller, Sprite, Canvas and collision |
 
-Optional extras will be `@scoopjs/*` plugins next to it (see
+Optional extras will be plugin packages next to it (see
 [docs/adr/0001](docs/adr/0001-plugins-are-composition.md)).
 
 ## Working on it
@@ -28,7 +28,7 @@ needs `resolve.dedupe: ['solid-js']`.
 
 Run `pnpm changeset` with any change worth releasing, and commit the file it
 writes. On `main`, the release Action keeps a "Version Packages" PR open, and
-merging that PR publishes to npm. See [plan.md](plan.md) for how publishing is
-set up.
+merging that PR publishes to GitHub Packages, for now. See
+[plan.md](plan.md) for how publishing is set up.
 
 Words used here: [GLOSSARY.md](GLOSSARY.md).

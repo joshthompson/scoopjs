@@ -51,8 +51,8 @@ What a game gives a Scene to swap an image for the one to actually show, such as
 ### Packages
 
 **Core**:
-The `scoopjs` package: Scene, Controller, Sprite, Canvas and collision. A game can't do without it.
+The engine's main package (`@joshthompson/scoopjs` for now, installed as `scoopjs`): Scene, Controller, Sprite, Canvas and collision. A game can't do without it.
 
 **Plugin**:
-An `@scoopjs/*` package that a game can choose to use, built only on Core's public API, never registered with it.
+A package of its own that a game can choose to use, built only on Core's public API, never registered with it.
 _Avoid_: Extension, addon, module

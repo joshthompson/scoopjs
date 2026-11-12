@@ -1,12 +1,11 @@
 name: Release
 
 # On every push to main: opens (or updates) the "Version Packages" PR while
-# there are changesets waiting, and publishes to npm once that PR is merged.
+# there are changesets waiting, and publishes to GitHub Packages once that PR
+# is merged.
 #
-# Publishes with npm trusted publishing (OIDC), so there's no npm token
-# anywhere. Each package has to exist on npm before it can be given a trusted
-# publisher, so a new package's first version is published by hand: see
-# plan.md, "Publishing".
+# Publishes with this repo's own GITHUB_TOKEN, so there's no secret to set
+# up: the first release creates the package. See plan.md, "Publishing".
 
 on:
   push:
@@ -17,7 +16,7 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
+  packages: write
 
 jobs:
   release:
@@ -25,8 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-      # Node 24 comes with npm 11, which trusted publishing needs (11.5.1 or
-      # later). No `registry-url`: the `.npmrc` it writes expects a token.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -36,6 +33,12 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      # The token for GitHub Packages. Each package's `publishConfig.registry`
+      # sends it there rather than to npm.
+      - name: Log in to GitHub Packages
+        run: echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: changesets/action@v1
         with:
           version: pnpm version-packages
@@ -44,4 +47,3 @@ jobs:
           commit: Version Packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true

@@ -1,5 +1,5 @@
 {
-	"name": "scoopjs",
+	"name": "@joshthompson/scoopjs",
 	"version": "0.1.0",
 	"description": "A game engine where SolidJS components are the game objects",
 	"keywords": ["solid", "solidjs", "game", "engine", "sprite"],
@@ -42,6 +42,6 @@
 		"vitest": "^5.1.0"
 	},
 	"publishConfig": {
-		"access": "public"
+		"registry": "https://npm.pkg.github.com"
 	}
 }
