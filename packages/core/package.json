@@ -1,6 +1,6 @@
 {
 	"name": "@joshthompson/scoopjs",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "A game engine where SolidJS components are the game objects",
 	"keywords": ["solid", "solidjs", "game", "engine", "sprite"],
 	"license": "MIT",
