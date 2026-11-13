@@ -9,7 +9,9 @@ import {
 import type { Controller } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
 import type { Canvas, CanvasControllers } from './components/Canvas'
-import type { Rect } from './types'
+import { drawOrder } from './drawOrder'
+import { drawnBox } from './geometry'
+import type { Rect, Vector } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
 export type SceneComponent<T extends {} = any> = Component<
@@ -181,6 +183,25 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 	getControllersByType<T = Controller<any>>(type: string) {
 		return (this.lookup().byType.get(type) ?? []) as T[]
+	}
+
+	/**
+	 * The Controllers drawn over `point`, topmost first, whichever Renderer
+	 * draws them. `point` is in the scene's coordinates, as the Renderers'
+	 * `onClick`, `onMouseDown` and `onMouseUp` give it.
+	 */
+	controllersAt(point: Vector): C[] {
+		return drawOrder(this)
+			.filter((controller) => {
+				const box = drawnBox(controller)
+				return (
+					point.x >= box.x &&
+					point.x <= box.x + box.width &&
+					point.y >= box.y &&
+					point.y <= box.y + box.height
+				)
+			})
+			.reverse() as C[]
 	}
 
 	getSolidControllerRects(): Rect[] {

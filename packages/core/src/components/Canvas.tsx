@@ -10,6 +10,7 @@ import {
 import type { Controller } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
+import { sortByAssetOrder } from '../drawOrder'
 import type { Vector } from '../types'
 import { Modal } from './Modal'
 import { ControllerSprite } from './Sprite'
@@ -79,21 +80,8 @@ export function Canvas(props: CanvasProps) {
 		props.scene.destroy()
 	})
 
-	const sprites = () => {
-		// Where each type first comes in `assetOrder`, looked up once rather
-		// than searched for on every comparison.
-		const assetOrder = new Map<string, number>()
-		for (const [index, type] of (
-			props.scene.options.assetOrder?.flat() ?? []
-		).entries()) {
-			if (!assetOrder.has(type)) assetOrder.set(type, index)
-		}
-		const priority = (type: string) => assetOrder.get(type) ?? -1
-		return props.scene.controllers
-			.get()
-			.map(({ controller }) => controller)
-			.toSorted((a, b) => priority(b.type) - priority(a.type))
-	}
+	// Shared with `scene.controllersAt`, so what a click finds is what's on top
+	const sprites = () => sortByAssetOrder(props.scene)
 
 	const drawn = () => (
 		<For each={sprites()}>
