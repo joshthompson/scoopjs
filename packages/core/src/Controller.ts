@@ -7,6 +7,7 @@ import {
 } from './collision'
 import type { Sprite } from './components/Sprite'
 import { type FrameStep, createFrameStepper } from './frames'
+import { drawnBox } from './geometry'
 import type { Vector } from './types'
 
 type Accessorise<T> = {
@@ -53,6 +54,9 @@ export interface Controller<CP extends ControllerBaseType> {
 	age: Accessor<number>
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 	childControllers: Accessor<Controller<any>[]>
+	/** The Controller this one is attached to, if it's attached to one. */
+	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
+	carrier: Accessor<Controller<any> | undefined>
 	/** The Frame its Sprite shows, which is `$currentFrame`. */
 	currentFrame: Accessor<number>
 	/**
@@ -90,7 +94,17 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	onMount?: (data: OnMountData<T>) => void
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
+type AnyController = Controller<any>
+
 type ExtractControllerType<T> = T extends Controller<infer A> ? A : never
+
+// How `attach` tells a Controller what's carrying it, without anyone else
+// being able to.
+const setCarriers = new WeakMap<
+	AnyController,
+	Setter<AnyController | undefined>
+>()
 
 const joinClasses = (...classes: (string | undefined)[]) =>
 	classes.filter(Boolean).join(' ')
@@ -104,6 +118,7 @@ export function createController<CP extends ControllerBaseType>(
 		// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 		Controller<any>[]
 	>([])
+	const [carrier, setCarrier] = createSignal<AnyController | undefined>()
 	const data: CP = options.init()
 	const frames = () => data.frames?.() ?? options.frames ?? []
 	// Stepped here rather than by whatever draws the Sprite, so the Frame is
@@ -127,19 +142,12 @@ export function createController<CP extends ControllerBaseType>(
 	const setGame = (scene: Scene) => {
 		data.scene = scene
 	}
-	// Worked out from the controllers' own positions and sizes, never from the
-	// page, so a scene behaves the same whatever draws it.
+	// Compares where the two are drawn, worked out from the controllers
+	// themselves rather than from the page, so a scene behaves the same
+	// whatever draws it.
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 	const hitTest = (other: Controller<any>) =>
-		isOverlapping(
-			{ x: data.x(), y: data.y(), width: data.width(), height: data.height() },
-			{
-				x: other.data.x(),
-				y: other.data.y(),
-				width: other.data.width(),
-				height: other.data.height(),
-			},
-		)
+		isOverlapping(drawnBox(controller), drawnBox(other))
 	const distanceTo = (x: number, y: number) => {
 		return Math.hypot(data.x() - x, data.y() - y)
 	}
@@ -147,8 +155,9 @@ export function createController<CP extends ControllerBaseType>(
 		return Math.atan2(y - data.y(), x - data.x())
 	}
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	const attach = (controller: Controller<any>) => {
-		setChildControllers([...childControllers(), controller])
+	const attach = (part: Controller<any>) => {
+		setChildControllers([...childControllers(), part])
+		setCarriers.get(part)?.(controller)
 	}
 
 	const controller: Controller<CP> = {
@@ -186,10 +195,12 @@ export function createController<CP extends ControllerBaseType>(
 		age,
 		data,
 		childControllers,
+		carrier,
 		currentFrame,
 		stepFrame,
 		sprite: () => sprite,
 	}
+	setCarriers.set(controller, setCarrier)
 
 	// One sprite for the controller's whole life, each of its values worked out
 	// when it's read. A sprite then only redoes the parts that read whatever

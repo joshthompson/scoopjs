@@ -1,0 +1,270 @@
+import type { Controller } from './Controller'
+import type { Rect, Vector } from './types'
+
+// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
+type AnyController = Controller<any>
+
+/**
+ * A 2D transform, laid out as `DOMMatrix` and a canvas's `setTransform` take
+ * it: a point (x, y) goes to (a·x + c·y + e, b·x + d·y + f).
+ */
+export interface Matrix {
+	a: number
+	b: number
+	c: number
+	d: number
+	e: number
+	f: number
+}
+
+const identity: Matrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
+
+/** `m` then `n`, as CSS lists them: `n` is applied to a point first. */
+function multiply(m: Matrix, n: Matrix): Matrix {
+	return {
+		a: m.a * n.a + m.c * n.b,
+		b: m.b * n.a + m.d * n.b,
+		c: m.a * n.c + m.c * n.d,
+		d: m.b * n.c + m.d * n.d,
+		e: m.a * n.e + m.c * n.f + m.e,
+		f: m.b * n.e + m.d * n.f + m.f,
+	}
+}
+
+const translation = (x: number, y: number): Matrix => ({
+	...identity,
+	e: x,
+	f: y,
+})
+
+const radians = (degrees: number) => (degrees * Math.PI) / 180
+
+function rotation(degrees: number): Matrix {
+	const cos = Math.cos(radians(degrees))
+	const sin = Math.sin(radians(degrees))
+	return { a: cos, b: sin, c: -sin, d: cos, e: 0, f: 0 }
+}
+
+const skewing = (x: number, y: number): Matrix => ({
+	...identity,
+	b: Math.tan(radians(y)),
+	c: Math.tan(radians(x)),
+})
+
+const scaling = (x: number, y: number): Matrix => ({ ...identity, a: x, d: y })
+
+function apply(m: Matrix, x: number, y: number) {
+	return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }
+}
+
+/** A CSS length in pixels, with percentages of `size`. */
+function length(value: string, size: number) {
+	if (value.endsWith('%')) return (Number.parseFloat(value) / 100) * size
+	if (value.endsWith('px')) return Number.parseFloat(value)
+	// Only a bare 0 is a length without a unit
+	return Number(value) === 0 ? 0 : undefined
+}
+
+const turns: Record<string, number> = {
+	deg: 1,
+	rad: 180 / Math.PI,
+	grad: 0.9,
+	turn: 360,
+}
+
+/** A CSS angle in degrees. */
+function angle(value: string) {
+	const unit = value.match(/[a-z]+$/)?.[0]
+	if (!unit) return Number(value) === 0 ? 0 : undefined
+	const scale = turns[unit]
+	return scale === undefined ? undefined : Number.parseFloat(value) * scale
+}
+
+/**
+ * One function of a CSS `transform`, or nothing for one outside the
+ * `translate`, `scale`, `rotate` and `skew` families.
+ */
+function transformFunction(
+	name: string,
+	args: string[],
+	width: number,
+	height: number,
+): Matrix | undefined {
+	const [first, second] = args
+	const number = (value = '') => (value === '' ? undefined : Number(value))
+	switch (name) {
+		case 'translate': {
+			const x = length(first, width)
+			const y = second === undefined ? 0 : length(second, height)
+			return x === undefined || y === undefined ? undefined : translation(x, y)
+		}
+		case 'translateX': {
+			const x = length(first, width)
+			return x === undefined ? undefined : translation(x, 0)
+		}
+		case 'translateY': {
+			const y = length(first, height)
+			return y === undefined ? undefined : translation(0, y)
+		}
+		case 'scale': {
+			const x = number(first)
+			return x === undefined ? undefined : scaling(x, number(second) ?? x)
+		}
+		case 'scaleX': {
+			const x = number(first)
+			return x === undefined ? undefined : scaling(x, 1)
+		}
+		case 'scaleY': {
+			const y = number(first)
+			return y === undefined ? undefined : scaling(1, y)
+		}
+		case 'rotate': {
+			const degrees = angle(first)
+			return degrees === undefined ? undefined : rotation(degrees)
+		}
+		case 'skew': {
+			const x = angle(first)
+			const y = second === undefined ? 0 : angle(second)
+			return x === undefined || y === undefined ? undefined : skewing(x, y)
+		}
+		case 'skewX': {
+			const x = angle(first)
+			return x === undefined ? undefined : skewing(x, 0)
+		}
+		case 'skewY': {
+			const y = angle(first)
+			return y === undefined ? undefined : skewing(0, y)
+		}
+	}
+}
+
+/**
+ * A CSS `transform`, its functions applied as CSS applies them. Functions it
+ * doesn't know are left out, rather than throwing the rest away.
+ */
+function parseTransform(value: string, width: number, height: number) {
+	let matrix = identity
+	for (const [, name, args] of value.matchAll(/([a-zA-Z]+)\(([^)]*)\)/g)) {
+		const parts = args
+			.split(/[\s,]+/)
+			.map((arg) => arg.trim())
+			.filter(Boolean)
+		const step = transformFunction(name, parts, width, height)
+		if (step) matrix = multiply(matrix, step)
+	}
+	return matrix
+}
+
+const originKeywords: Record<string, number> = {
+	left: 0,
+	top: 0,
+	center: 0.5,
+	right: 1,
+	bottom: 1,
+}
+
+/**
+ * A `transform-origin`, as CSS reads it: one or two of lengths, percentages
+ * and keywords, in either order where the keywords say which is which.
+ * Anything else leaves the origin as it was.
+ */
+function parseOrigin(
+	value: string,
+	width: number,
+	height: number,
+): Vector | undefined {
+	let [first, second = 'center'] = value.trim().split(/\s+/)
+	if (
+		first === 'top' ||
+		first === 'bottom' ||
+		second === 'left' ||
+		second === 'right'
+	) {
+		;[first, second] = [second, first]
+	}
+	const x =
+		first in originKeywords
+			? originKeywords[first] * width
+			: length(first, width)
+	const y =
+		second in originKeywords
+			? originKeywords[second] * height
+			: length(second, height)
+	return x === undefined || y === undefined ? undefined : { x, y }
+}
+
+/**
+ * How far parallax leaves a Controller from where its x and y say. With no
+ * parallax (1) it moves with the scene. With less, the camera moves it less
+ * than the rest, so against the scene it drifts along with the camera, by
+ * `1 - parallax` of however far the camera has gone. Attached Controllers move
+ * with whatever carries them, so their own parallax doesn't count.
+ */
+function parallaxOffset(controller: AnyController, parallax: number) {
+	const camera = controller.data.scene?.canvas.get()
+	if (!camera || parallax === 1) return { x: 0, y: 0 }
+	return {
+		x: camera.x() * (1 - parallax),
+		y: camera.y() * (1 - parallax),
+	}
+}
+
+/**
+ * Where a Controller's Sprite is drawn: the transform from its own box,
+ * (0, 0) to (width, height), to the scene's coordinates. Those are what the
+ * Renderers' pointer handlers give, the camera's position added to where on
+ * the Renderer the pointer is. To paint on the screen, move this by minus
+ * the camera's position.
+ */
+export function spriteTransform(controller: AnyController): Matrix {
+	const sprite = controller.sprite()
+	const carrier = controller.carrier()
+	const { width, height } = sprite
+	const style = sprite.style ?? {}
+	// The DOM Sprite turns about its `origin`, or its middle without one,
+	// unless its style says otherwise.
+	const origin = (typeof style['transform-origin'] === 'string' &&
+		parseOrigin(style['transform-origin'], width, height)) ||
+		sprite.origin || { x: width / 2, y: height / 2 }
+	// The DOM Sprite flips and scales with `transform`, so a `transform` in
+	// its style takes the place of those, just as it does on the page.
+	const transform =
+		typeof style.transform === 'string'
+			? parseTransform(style.transform, width, height)
+			: scaling(sprite.xScale ?? 1, sprite.yScale ?? 1)
+	// The separate `translate` property moves it on the screen, outside its
+	// rotation, as CSS has it.
+	const [moveX = '0', moveY = '0'] =
+		typeof style.translate === 'string'
+			? style.translate.trim().split(/\s+/)
+			: []
+	const shift = carrier
+		? { x: 0, y: 0 }
+		: parallaxOffset(controller, sprite.parallax ?? 1)
+	const local = [
+		translation(sprite.x + shift.x, sprite.y + shift.y),
+		translation(length(moveX, width) ?? 0, length(moveY, height) ?? 0),
+		translation(origin.x, origin.y),
+		rotation(sprite.rotation ?? 0),
+		transform,
+		translation(-origin.x, -origin.y),
+	].reduce(multiply)
+	return carrier ? multiply(spriteTransform(carrier), local) : local
+}
+
+/** The axis-aligned box around where a Controller's Sprite is drawn. */
+export function drawnBox(controller: AnyController): Rect {
+	const { width, height } = controller.sprite()
+	const m = spriteTransform(controller)
+	const corners = [
+		apply(m, 0, 0),
+		apply(m, width, 0),
+		apply(m, 0, height),
+		apply(m, width, height),
+	]
+	const xs = corners.map((p) => p.x)
+	const ys = corners.map((p) => p.y)
+	const x = Math.min(...xs)
+	const y = Math.min(...ys)
+	return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+}
