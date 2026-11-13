@@ -17,7 +17,7 @@ import { ControllerSprite } from './Sprite'
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 export type CanvasControllers = { id: string; controller: Controller<any> }[]
 
-export interface CanvasProps {
+export interface DomRendererProps {
 	ref?: HTMLDivElement | undefined
 	scene: Scene
 	loading?: Component<{ scene: Scene }>
@@ -26,12 +26,12 @@ export interface CanvasProps {
 	underDialog?: JSX.Element
 	overlay?: JSX.Element
 	underlay?: JSX.Element
-	/** After the canvas's own styles: its background is white unless set here. */
+	/** After the renderer's own styles: its background is white unless set here. */
 	style?: JSX.CSSProperties
 	class?: string
 	/**
-	 * Keeps the scene running even with its canvas off the screen: for one
-	 * that moves its own canvas about, like a camera looking a long way up a
+	 * Keeps the scene running even with the renderer off the screen: for a
+	 * game that moves it about itself, like a camera looking a long way up a
 	 * mountain.
 	 */
 	runOffScreen?: boolean
@@ -40,6 +40,11 @@ export interface CanvasProps {
 	onMouseUp?: (event: Vector) => void
 }
 
+/**
+ * The scene's view of itself: the camera's x and y, its size and its
+ * controllers. It's `scene.canvas`, and only shares its name with the
+ * deprecated `Canvas` component.
+ */
 export interface Canvas<T extends CanvasControllers = CanvasControllers> {
 	width: Accessor<number>
 	setWidth: Setter<number>
@@ -53,10 +58,11 @@ export interface Canvas<T extends CanvasControllers = CanvasControllers> {
 }
 
 /**
- * Draws a scene: every controller as a sprite, in `assetOrder`. It's a
- * `<div>`, not a `<canvas>`, each sprite a `<div>` of its own.
+ * The DOM Renderer. Draws a scene: every controller as a sprite, in
+ * `assetOrder`. It's a `<div>`, not a `<canvas>`, each sprite a `<div>` of its
+ * own.
  */
-export function Canvas(props: CanvasProps) {
+export function DomRenderer(props: DomRendererProps) {
 	let element: HTMLDivElement | undefined
 
 	// The scene only runs while some of it is on the screen, not while it's
@@ -70,8 +76,8 @@ export function Canvas(props: CanvasProps) {
 		onCleanup(() => observer.disconnect())
 	})
 
-	// The scene goes with its canvas: otherwise its tick carries on running for
-	// as long as the page is open, long after anyone can see it.
+	// The scene goes with its renderer: otherwise its tick carries on running
+	// for as long as the page is open, long after anyone can see it.
 	onCleanup(() => {
 		for (const { controller } of props.scene.controllers.get()) {
 			controller.destroy()
@@ -135,7 +141,7 @@ export function Canvas(props: CanvasProps) {
 
 	return (
 		<SceneContext.Provider value={props.scene}>
-			{/* The canvas can't be focused, so it has no keys of its own: anything
+			{/* The renderer can't be focused, so it has no keys of its own: anything
 			    on it a keyboard can reach is a link or a button inside it. */}
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: see above */}
 			<div
@@ -187,3 +193,9 @@ export function Canvas(props: CanvasProps) {
 		</SceneContext.Provider>
 	)
 }
+
+/** @deprecated Renamed `DomRendererProps`. Goes in 1.0. */
+export type CanvasProps = DomRendererProps
+
+/** @deprecated Renamed `DomRenderer`. Goes in 1.0. */
+export const Canvas = DomRenderer
