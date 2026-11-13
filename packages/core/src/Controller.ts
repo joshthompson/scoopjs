@@ -6,6 +6,7 @@ import {
 	isOverlapping,
 } from './collision'
 import type { Sprite } from './components/Sprite'
+import { type FrameStep, createFrameStepper } from './frames'
 import { drawnBox } from './geometry'
 import type { Vector } from './types'
 
@@ -56,6 +57,13 @@ export interface Controller<CP extends ControllerBaseType> {
 	/** The Controller this one is attached to, if it's attached to one. */
 	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 	carrier: Accessor<Controller<any> | undefined>
+	/** The Frame its Sprite shows, which is `$currentFrame`. */
+	currentFrame: Accessor<number>
+	/**
+	 * Moves its Frame on by one step of a frame clock, and its Attached
+	 * Controllers' with it. The Scene calls this: a game doesn't need to.
+	 */
+	stepFrame: (step: FrameStep) => void
 }
 
 interface OnEnterFrameData<T extends ControllerBaseType> {
@@ -106,13 +114,30 @@ export function createController<CP extends ControllerBaseType>(
 ): Controller<CP> {
 	const [age, setAge] = createSignal<number>(0)
 	const onEnterFrame = options.onEnterFrame
-	const [currentFrame, setCurrentFrame] = createSignal<number>(0)
 	const [childControllers, setChildControllers] = createSignal<
 		// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 		Controller<any>[]
 	>([])
 	const [carrier, setCarrier] = createSignal<AnyController | undefined>()
 	const data: CP = options.init()
+	const frames = () => data.frames?.() ?? options.frames ?? []
+	// Stepped here rather than by whatever draws the Sprite, so the Frame is
+	// the same whichever Renderer draws it, and `$currentFrame` is exactly
+	// the Frame on screen.
+	const { currentFrame, step: stepOwnFrame } = createFrameStepper({
+		frameCount: () => frames().length,
+		frameInterval: () => {
+			const interval = data.frameInterval?.()
+			return (typeof interval === 'function' ? interval() : interval) ?? 100
+		},
+		playing: () => data.state?.() === 'play',
+		frame: () => data.frame?.(),
+		randomStartFrame: options.randomStartFrame,
+	})
+	const stepFrame = (step: FrameStep) => {
+		stepOwnFrame(step)
+		for (const child of childControllers()) child.stepFrame(step)
+	}
 	const destroy = () => {}
 	const setGame = (scene: Scene) => {
 		data.scene = scene
@@ -171,6 +196,8 @@ export function createController<CP extends ControllerBaseType>(
 		data,
 		childControllers,
 		carrier,
+		currentFrame,
+		stepFrame,
 		sprite: () => sprite,
 	}
 	setCarriers.set(controller, setCarrier)
@@ -181,7 +208,7 @@ export function createController<CP extends ControllerBaseType>(
 	// or their name.
 	const sprite: Sprite = {
 		get frames() {
-			return data?.frames?.() ?? options.frames ?? []
+			return frames()
 		},
 		get frame() {
 			return data?.frame?.()
@@ -236,7 +263,9 @@ export function createController<CP extends ControllerBaseType>(
 				style: data.inner?.style?.(),
 			}
 		},
-		onChangeFrame: (frame) => setCurrentFrame(frame),
+		get currentFrame() {
+			return currentFrame()
+		},
 		onMount: ({ $ref }) => {
 			options.onMount?.({
 				$: data,

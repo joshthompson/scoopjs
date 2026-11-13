@@ -5,7 +5,7 @@ Extracted from the [Scoop Bus Run Club](https://scoopbus.run) games.
 
 | Package | What it is |
 |---|---|
-| [`@joshthompson/scoopjs`](packages/core) | Core: Scene, Controller, Sprite, Canvas and collision |
+| [`@joshthompson/scoopjs`](packages/core) | Core: Scene, Controller, Sprite, the DOM Renderer and collision |
 
 Optional extras will be plugin packages next to it (see
 [docs/adr/0001](docs/adr/0001-plugins-are-composition.md)).

@@ -8,7 +8,7 @@ import {
 } from 'solid-js'
 import type { Controller } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
-import type { Canvas, CanvasControllers } from './components/Canvas'
+import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
 import { drawnBox } from './geometry'
 import type { Rect, Vector } from './types'
@@ -56,10 +56,11 @@ export interface SceneOptions {
 	 */
 	standbyFrames?: boolean
 	/**
-	 * What sprites step through their frames on. `'tick'` (the default) is the
-	 * scene's tick, so a sprite changes frame in the same update as it moves.
-	 * `'display'` is the screen's own refresh, timed to the millisecond, for
-	 * frame intervals that aren't a whole number of ticks.
+	 * What Controllers step through their Frames on. `'tick'` (the default) is
+	 * the scene's tick, so a sprite changes frame in the same update as it
+	 * moves. `'display'` is the screen's own refresh, timed to the
+	 * millisecond, for frame intervals that aren't a whole number of ticks.
+	 * Either way the Scene steps them, whichever Renderer draws it.
 	 */
 	frameClock?: 'tick' | 'display'
 }
@@ -67,12 +68,14 @@ export interface SceneOptions {
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 export class Scene<C extends Controller<any> = Controller<any>> {
 	interval: number
+	private animationFrame: number | undefined
 	/** How long a tick is, in milliseconds. */
 	frameRate: number
 	/**
-	 * Run every tick after the controllers have moved, which is how sprites
-	 * step through their frames: in the same update as everything else, rather
-	 * than each on a clock of its own.
+	 * Run every tick after the controllers have moved and their Frames have
+	 * stepped, even while paused: in the same update as everything else,
+	 * rather than each on a clock of its own. A Sprite used without a
+	 * Controller steps its Frames on one.
 	 */
 	tickers = new Set<() => void>()
 	/**
@@ -87,7 +90,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	}>
 	private disposeLookup: () => void
 	loading = createObjectSignal(false)
-	/** Whether any of the scene is on the screen (see `Canvas`). */
+	/** Whether any of the scene is on the screen, as its Renderer sees it. */
 	visible = createObjectSignal(true)
 	modal = createObjectSignal(undefined as JSX.Element | undefined)
 	loadingAssetCount = createObjectSignal(0)
@@ -130,9 +133,18 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			() =>
 				this.visible.get() &&
 				batch(() => {
-					if (this.isActive()) {
+					const paused = !this.isActive()
+					if (!paused) {
 						for (const { controller } of this.controllers.get()) {
 							controller.onEnterFrame(this)
+						}
+					}
+					// Frames step after everything's moved, so a Sprite changes
+					// Frame in the same update as it moves. Paused, they don't move
+					// on, but still jump to a `frame` a game sets.
+					if (this.options.frameClock !== 'display') {
+						for (const { controller } of this.controllers.get()) {
+							controller.stepFrame({ elapsed: this.frameRate, paused })
 						}
 					}
 					for (const ticker of this.tickers) ticker()
@@ -140,6 +152,23 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 				}),
 			this.frameRate,
 		)
+
+		// On the `'display'` frame clock, Frames step on the screen's refresh
+		// instead, all together just before the browser paints.
+		if (this.options.frameClock === 'display') {
+			const refresh = (now: number) => {
+				if (this.visible.get()) {
+					const paused = !this.isActive()
+					batch(() => {
+						for (const { controller } of this.controllers.get()) {
+							controller.stepFrame({ now, paused })
+						}
+					})
+				}
+				this.animationFrame = requestAnimationFrame(refresh)
+			}
+			this.animationFrame = requestAnimationFrame(refresh)
+		}
 
 		// Run setup
 		this.setup()
@@ -234,6 +263,9 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 
 	destroy() {
 		clearInterval(this.interval)
+		if (this.animationFrame !== undefined) {
+			cancelAnimationFrame(this.animationFrame)
+		}
 		this.tickers.clear()
 		this.disposeLookup()
 	}
