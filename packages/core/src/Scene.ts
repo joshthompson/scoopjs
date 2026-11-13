@@ -8,7 +8,7 @@ import {
 } from 'solid-js'
 import type { Controller } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
-import type { Canvas, CanvasControllers } from './components/Canvas'
+import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import type { Rect } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
@@ -88,7 +88,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	}>
 	private disposeLookup: () => void
 	loading = createObjectSignal(false)
-	/** Whether any of the scene is on the screen (see `Canvas`). */
+	/** Whether any of the scene is on the screen, as its Renderer sees it. */
 	visible = createObjectSignal(true)
 	modal = createObjectSignal(undefined as JSX.Element | undefined)
 	loadingAssetCount = createObjectSignal(0)
