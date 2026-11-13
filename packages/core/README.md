@@ -23,7 +23,7 @@ GitHub Packages needs a token even to install. It goes in `~/.npmrc` as
 `//npm.pkg.github.com/:_authToken=…`, from a token with `read:packages`.
 
 ```tsx
-import { Canvas, Key, Scene, createController } from 'scoopjs'
+import { DomRenderer, Key, Scene, createController } from 'scoopjs'
 import { createSignal } from 'solid-js'
 import busImage from './bus.png'
 
@@ -53,20 +53,21 @@ const scene = new Scene('demo', {
 	setup: (scene) => scene.addController(bus),
 })
 
-export const Game = () => <Canvas scene={scene} />
+export const Game = () => <DomRenderer scene={scene} />
 ```
 
 ## The pieces
 
 - **`Scene`** is one running game world. It ticks every `frameRate`
-  milliseconds while its canvas is on the screen. Each tick, every
-  controller's `onEnterFrame` runs, and then every ticker. All of a tick is
-  one Solid `batch`.
+  milliseconds while it's on the screen. Each tick, every controller's
+  `onEnterFrame` runs, and then every ticker. All of a tick is one Solid
+  `batch`.
 - **`createController`** makes one thing in a scene: its data (signals) and
   what it does each tick. `createConnectedController` makes one that rides
   on another, and `attach` hangs one controller on another.
-- **`Canvas`** draws a scene. It's DOM elements, not a `<canvas>`. Pass
-  `style` to change its background, which is white by default.
+- **`DomRenderer`** draws a scene, each sprite as page elements of its own,
+  not a `<canvas>`. Pass `style` to change its background, which is white by
+  default. It was called `Canvas`, and that name still works until 1.0.
 - **`Sprite`** is how a controller looks: its frames (image URLs, optionally
   `url#left,top,width,height` for part of a sprite sheet), size, scale and
   rotation.
@@ -79,7 +80,7 @@ export const Game = () => <Canvas scene={scene} />
 - **`resolveAsset`** (on `Scene`) swaps every image URL for the one to
   actually show, such as a seasonal version of it.
 - **`--scoopjs-modal-backdrop`** is the CSS colour behind `scene.modal`. Set it
-  on your canvas (`transparent` for none).
+  on your renderer (`transparent` for none).
 - **`cameraLayer`** (on `Scene`) moves one layer by the camera instead of every
   sprite, which is cheaper with a lot of sprites. A sprite's `z-index` then only
   orders it among the other sprites.
@@ -88,7 +89,7 @@ export const Game = () => <Canvas scene={scene} />
 - **`frameClock`** (on `Scene`) is what sprites step through their frames on:
   the scene's tick (`'tick'`, the default) or the screen's refresh
   (`'display'`), for frame intervals that aren't a whole number of ticks.
-- **`underDialog`** (on `Canvas`) is drawn over the sprites but under the
+- **`underDialog`** (on `DomRenderer`) is drawn over the sprites but under the
   `dialog`.
 
 ## Building with Vite
