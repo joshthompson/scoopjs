@@ -19,16 +19,16 @@ Decided on 11 November 2026. The decision is recorded in the monorepo as
       local `link:` for now; `apps/web/src/engine` deleted
 - [x] scoopbusrunclub ready to install from GitHub Packages: `.npmrc` scope
       line, and a login step and `packages: read` in its deploy workflows
-- [ ] First commit, then the public GitHub repo (`joshthompson/scoopjs`)
-- [ ] First push to `main` publishes `@joshthompson/scoopjs@0.1.0`
-- [ ] The package lets scoopbusrunclub's Actions read it
-- [ ] A token on this laptop that can read GitHub Packages
-- [ ] scoopbusrunclub switched from `link:` to
-      `"scoopjs": "npm:@joshthompson/scoopjs@^0.1.0"`, then committed
+- [x] First commit, then the public GitHub repo (`joshthompson/scoopjs`)
+- [x] First push to `main` publishes `@joshthompson/scoopjs@0.1.0`
+- [x] The package lets scoopbusrunclub's Actions read it
+- [x] A token on this laptop that can read GitHub Packages
+- [x] scoopbusrunclub switched from `link:` to
+      `"scoopjs": "npm:@joshthompson/scoopjs@^0.1.0"` (still to commit)
 - [ ] Later: settle the npm name and move there (see [Registry](#registry))
 
-Until that last step, **scoopbusrunclub can't deploy**: CI can't follow a
-`link:` to a folder on this laptop. See [Bootstrap](#bootstrap) for the order.
+scoopbusrunclub installs the published 0.1.0 (switched on 12 November 2026);
+its commit is still to be made.
 
 ## What ScoopJS is
 
