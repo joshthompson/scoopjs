@@ -140,19 +140,35 @@ function transformFunction(
 
 /**
  * A CSS `transform`, its functions applied as CSS applies them. Functions it
- * doesn't know are left out, rather than throwing the rest away.
+ * doesn't know, or can't read the arguments of, are left out rather than
+ * throwing the rest away, and listed in `unsupported`.
  */
 function parseTransform(value: string, width: number, height: number) {
 	let matrix = identity
-	for (const [, name, args] of value.matchAll(/([a-zA-Z]+)\(([^)]*)\)/g)) {
+	const unsupported: string[] = []
+	for (const [, name, args] of value.matchAll(
+		/([a-zA-Z][a-zA-Z0-9]*)\(([^)]*)\)/g,
+	)) {
 		const parts = args
 			.split(/[\s,]+/)
 			.map((arg) => arg.trim())
 			.filter(Boolean)
 		const step = transformFunction(name, parts, width, height)
 		if (step) matrix = multiply(matrix, step)
+		else unsupported.push(name)
 	}
-	return matrix
+	return { matrix, unsupported }
+}
+
+/**
+ * The functions in a `transform` that a Sprite's transform leaves out, such
+ * as `matrix` and the 3D ones, which are Canvas Issues.
+ */
+export function unsupportedTransforms(value: unknown): string[] {
+	// Its size makes no difference to whether a function can be read
+	return typeof value === 'string'
+		? parseTransform(value, 1, 1).unsupported
+		: []
 }
 
 const originKeywords: Record<string, number> = {
@@ -230,7 +246,7 @@ export function spriteTransform(controller: AnyController): Matrix {
 	// its style takes the place of those, just as it does on the page.
 	const transform =
 		typeof style.transform === 'string'
-			? parseTransform(style.transform, width, height)
+			? parseTransform(style.transform, width, height).matrix
 			: scaling(sprite.xScale ?? 1, sprite.yScale ?? 1)
 	// The separate `translate` property moves it on the screen, outside its
 	// rotation, as CSS has it.

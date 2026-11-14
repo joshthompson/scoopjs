@@ -1,6 +1,12 @@
-import { type Accessor, createEffect, createRoot } from 'solid-js'
+import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
+import {
+	mountWithoutElement,
+	reportControllerIssues,
+	reportMissingImage,
+	reportSceneIssues,
+} from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
@@ -19,11 +25,12 @@ export interface LoadedImage {
 
 /**
  * Loads the image at `url`, and calls `onLoad` once it has, maybe straight
- * away. An image that never loads paints nothing.
+ * away, or `onError` if it can't. An image that never loads paints nothing.
  */
 export type ImageLoader = (
 	url: string,
 	onLoad: (loaded: LoadedImage) => void,
+	onError?: () => void,
 ) => void
 
 export interface CanvasPainterOptions {
@@ -36,11 +43,12 @@ export interface CanvasPainterOptions {
 }
 
 /** Loads an image as the page would, with an `<img>`. */
-const loadWithImg: ImageLoader = (url, onLoad) => {
+const loadWithImg: ImageLoader = (url, onLoad, onError) => {
 	const img = new Image()
 	img.decoding = 'async'
 	img.onload = () =>
 		onLoad({ image: img, width: img.naturalWidth, height: img.naturalHeight })
+	img.onerror = () => onError?.()
 	img.src = url
 }
 
@@ -108,21 +116,32 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	const loadImage = options.loadImage ?? loadWithImg
 	const ctx = canvas.getContext('2d')
 	const filters = ctx && createFilterApplier(ctx)
+	reportSceneIssues(scene)
 
 	// Each image is loaded once, the first time a Sprite shows it, and is
-	// undefined until it has.
-	const images = new Map<string, { loaded?: LoadedImage }>()
-	const image = (url: string) => {
+	// undefined until it has. One that can't be loaded is a Canvas Issue for
+	// each type of Controller that shows it.
+	type Entry = { loaded?: LoadedImage; failed?: boolean }
+	const images = new Map<string, Entry>()
+	const image = (url: string, shownBy: AnyController) => {
 		let entry = images.get(url)
 		if (!entry) {
-			const created: { loaded?: LoadedImage } = {}
+			const created: Entry = {}
 			entry = created
 			images.set(url, created)
-			loadImage(url, (loaded) => {
-				created.loaded = loaded
-				invalidate()
-			})
+			loadImage(
+				url,
+				(loaded) => {
+					created.loaded = loaded
+					invalidate()
+				},
+				() => {
+					created.failed = true
+					reportMissingImage(scene, shownBy, url)
+				},
+			)
 		}
+		if (entry.failed) reportMissingImage(scene, shownBy, url)
 		return entry.loaded
 	}
 
@@ -139,7 +158,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		if (frame === undefined) return
 		const [url] = frame.split('#')
 		const resolved = scene.resolveAsset(url)
-		const original = image(resolved)
+		const original = image(resolved, c)
 		if (!original) return
 		// Recoloured by the style's filter, where the context can't do it
 		const loaded = filters?.image(resolved, original) ?? original
@@ -221,6 +240,8 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		) {
 			return
 		}
+		// Reported the first time it's drawn, and only then: nothing marks it
+		reportControllerIssues(scene, controller)
 		context.setTransform(
 			density,
 			0,
@@ -303,6 +324,19 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			camera.x()
 			camera.y()
 			invalidate()
+		})
+		// Each Controller's `onMount`, once it's in the Scene, as the DOM
+		// Renderer runs it once its Sprite's on the page. One taken out and
+		// put back is mounted again, as it would be there.
+		let mounted = new Set<AnyController>()
+		createEffect(() => {
+			const present = new Set(scene.getAllControllers())
+			untrack(() => {
+				for (const controller of present) {
+					if (!mounted.has(controller)) mountWithoutElement(scene, controller)
+				}
+			})
+			mounted = present
 		})
 		// A Frame stepping, which on the `'display'` frame clock happens
 		// between Ticks, and Controllers coming and going

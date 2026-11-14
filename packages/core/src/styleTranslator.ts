@@ -6,7 +6,7 @@
  */
 import type { JSX } from 'solid-js'
 import type { Controller } from './Controller'
-import { angle } from './geometry'
+import { angle, unsupportedTransforms } from './geometry'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 type AnyController = Controller<any>
@@ -57,6 +57,12 @@ export interface TranslatedStyle {
 	 * isn't a function at all is listed as it's written.
 	 */
 	unsupportedFilters: string[]
+	/**
+	 * The functions in its `transform` that a canvas doesn't draw, which are
+	 * Canvas Issues: `matrix`, the 3D ones, and those whose arguments it
+	 * can't read.
+	 */
+	unsupportedTransforms: string[]
 }
 
 /** The keys a canvas draws. Every other is a Canvas Issue. */
@@ -225,6 +231,7 @@ export function translateStyle(
 		removed: css.display === 'none',
 		zIndex: zIndex(style),
 		...translateFilter(css.filter),
+		unsupportedTransforms: unsupportedTransforms(css.transform),
 		untranslatable: Object.keys(css).filter(
 			(key) => !translatedKeys.has(key) && !absent(css[key]),
 		),

@@ -1,5 +1,6 @@
 import { type Accessor, type JSX, type Setter, createSignal } from 'solid-js'
 import type { Scene } from './Scene'
+import { recordCreation } from './canvasIssues'
 import {
 	type SolidRect,
 	blockBySolidsRectPlayer,
@@ -139,6 +140,9 @@ const joinClasses = (...classes: (string | undefined)[]) =>
 export function createController<CP extends ControllerBaseType>(
 	options: ControllerProps<CP>,
 ): Controller<CP> {
+	// Where it was created, for a Canvas Issue to say. Only kept as a string
+	// here, and read only if the Controller turns out to have one.
+	const creation = new Error().stack
 	const [age, setAge] = createSignal<number>(0)
 	const onEnterFrame = options.onEnterFrame
 	const [childControllers, setChildControllers] = createSignal<
@@ -233,6 +237,7 @@ export function createController<CP extends ControllerBaseType>(
 			draw({ ...painting, $: data, $currentFrame: currentFrame() })
 	}
 	setCarriers.set(controller, setCarrier)
+	recordCreation(controller, creation)
 
 	// One sprite for the controller's whole life, each of its values worked out
 	// when it's read. A sprite then only redoes the parts that read whatever
@@ -298,14 +303,18 @@ export function createController<CP extends ControllerBaseType>(
 		get currentFrame() {
 			return currentFrame()
 		},
-		onMount: ({ $ref }) => {
+		// `$ref` is passed on unread, since under the Canvas Renderer reading
+		// it is a Canvas Issue.
+		onMount: (mounted) => {
 			options.onMount?.({
 				$: data,
 				// biome-ignore lint/style/noNonNullAssertion: set before the sprite mounts
 				$scene: data.scene!,
 				$controller: controller,
 				$currentFrame: currentFrame(),
-				$ref: $ref,
+				get $ref() {
+					return mounted.$ref
+				},
 			})
 		},
 		controllers: childControllers,
