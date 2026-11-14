@@ -11,6 +11,7 @@ import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
 import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
 import { drawnBox } from './geometry'
+import { canvasStyle } from './styleTranslator'
 import type { Rect, Vector } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
@@ -216,12 +217,14 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 
 	/**
 	 * The Controllers drawn over `point`, topmost first, whichever Renderer
-	 * draws them. `point` is in the scene's coordinates, as the Renderers'
-	 * `onClick`, `onMouseDown` and `onMouseUp` give it.
+	 * draws them. Those hidden by their style, or by a carrier's, aren't
+	 * drawn, so they're left out. `point` is in the scene's coordinates, as
+	 * the Renderers' `onClick`, `onMouseDown` and `onMouseUp` give it.
 	 */
 	controllersAt(point: Vector): C[] {
 		return drawOrder(this)
 			.filter((controller) => {
+				if (canvasStyle(controller).hidden) return false
 				const box = drawnBox(controller)
 				return (
 					point.x >= box.x &&

@@ -2,7 +2,9 @@ import { type Accessor, createEffect, createRoot } from 'solid-js'
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
 import { drawOrder } from './drawOrder'
+import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
+import { canvasStyle } from './styleTranslator'
 import type { Rect } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
@@ -105,6 +107,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	const { scene, canvas } = options
 	const loadImage = options.loadImage ?? loadWithImg
 	const ctx = canvas.getContext('2d')
+	const filters = ctx && createFilterApplier(ctx)
 
 	// Each image is loaded once, the first time a Sprite shows it, and is
 	// undefined until it has.
@@ -135,8 +138,11 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		const frame = sprite.frames[c.currentFrame()]
 		if (frame === undefined) return
 		const [url] = frame.split('#')
-		const loaded = image(scene.resolveAsset(url))
-		if (!loaded) return
+		const resolved = scene.resolveAsset(url)
+		const original = image(resolved)
+		if (!original) return
+		// Recoloured by the style's filter, where the context can't do it
+		const loaded = filters?.image(resolved, original) ?? original
 		// `inner.rotation` turns only the Frame, not the box or the parts
 		// attached to it, about `inner.origin` or the middle, as the DOM
 		// Sprite's inner element does.
@@ -200,6 +206,8 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		controller: AnyController,
 		view: Rect,
 	) => {
+		const style = canvasStyle(controller)
+		if (style.hidden) return
 		const m = spriteTransform(controller)
 		// Nothing outside the view costs anything to paint. Each part is
 		// checked on its own, since one can reach out past its carrier.
@@ -222,6 +230,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			-view.y * density,
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
+		filters?.apply(style, m, density)
 		paintCurrentFrame(context, controller)
 	}
 

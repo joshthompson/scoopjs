@@ -1,5 +1,6 @@
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
+import { zIndex } from './styleTranslator'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 type AnyController = Controller<any>
@@ -52,10 +53,9 @@ export function drawOrder(scene: Scene): AnyController[] {
 	return ordered
 }
 
-/** A Controller with its style's `z-index`, 0 for `auto` or none. */
+/** A Controller with its style's `z-index`. */
 function withZIndex(controller: AnyController) {
-	const z = Number.parseInt(String(controller.sprite().style?.['z-index']), 10)
-	return { controller, z: z || 0 }
+	return { controller, z: zIndex(controller.sprite().style) }
 }
 
 /** Lowest `z-index` first. Sorting is stable, so ties stay in order. */

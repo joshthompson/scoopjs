@@ -73,7 +73,7 @@ const turns: Record<string, number> = {
 }
 
 /** A CSS angle in degrees. */
-function angle(value: string) {
+export function angle(value: string) {
 	const unit = value.match(/[a-z]+$/)?.[0]
 	if (!unit) return Number(value) === 0 ? 0 : undefined
 	const scale = turns[unit]
