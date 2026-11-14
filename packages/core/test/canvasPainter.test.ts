@@ -396,13 +396,80 @@ describe('the Canvas Renderer paints', () => {
 			expect(ctx.draws.map((d) => d.state.transform.e)).toEqual([5])
 		})
 
-		it('after a Ticker runs, as it does with the Scene paused', () => {
+		it('not after a Tick with the Scene paused, and nothing of the game running', () => {
 			loadAll('a')
 			const { ctx, scene } = painted(sprite('a'))
 			scene.modal.set('paused')
 			vi.advanceTimersByTime(10)
 			frames.run()
+			ctx.reset()
+			vi.advanceTimersByTime(30)
+			frames.run()
+			expect(frames.pending()).toBe(0)
+			expect(ctx.calls).toEqual([])
+		})
+
+		it("after a paused Tick that runs the game's own Ticker", () => {
+			loadAll('a')
+			const { ctx, scene } = painted(sprite('a'))
+			scene.modal.set('paused')
+			scene.tickers.add(() => {})
+			vi.advanceTimersByTime(30)
+			frames.run()
+			ctx.reset()
+			vi.advanceTimersByTime(10)
+			frames.run()
 			expect(ctx.draws).toHaveLength(1)
+		})
+
+		it('after a paused Tick that runs afterEnterFrames', () => {
+			loadAll('a')
+			const { ctx, scene } = paint([sprite('a')], {
+				afterEnterFrames: () => {},
+			})
+			frames.run()
+			scene.modal.set('paused')
+			vi.advanceTimersByTime(30)
+			frames.run()
+			ctx.reset()
+			vi.advanceTimersByTime(10)
+			frames.run()
+			expect(ctx.draws).toHaveLength(1)
+		})
+
+		it('after the Tick that paused the Scene, with what moved in it', () => {
+			loadAll('a')
+			const a = createController<ControllerBaseType>({
+				frames: ['a.png'],
+				init: () => {
+					const [x, setX] = createSignal(0)
+					return {
+						id: 'a',
+						type: 'a',
+						x,
+						setX,
+						y: () => 0,
+						width: () => 10,
+						height: () => 10,
+					}
+				},
+				// Moves on, and on its third Tick ends the game
+				onEnterFrame: ({ $, $scene }) => {
+					$.setX?.($.x() + 1)
+					if ($.x() === 3) $scene.modal.set('game over')
+				},
+			})
+			const { ctx } = painted(a)
+			vi.advanceTimersByTime(20)
+			frames.run()
+			ctx.reset()
+			vi.advanceTimersByTime(10)
+			frames.run()
+			expect(ctx.draws.map((d) => d.state.transform.e)).toEqual([3])
+			ctx.reset()
+			vi.advanceTimersByTime(10)
+			frames.run()
+			expect(ctx.calls).toEqual([])
 		})
 
 		it('after the camera moves', () => {

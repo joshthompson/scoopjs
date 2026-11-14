@@ -42,6 +42,9 @@ export interface CanvasPainterOptions {
 	loadImage?: ImageLoader
 }
 
+// Every painter's own Ticker, which are no reason for another to repaint
+const painterTicks = new WeakSet<() => void>()
+
 /** Loads an image as the page would, with an `<img>`. */
 const loadWithImg: ImageLoader = (url, onLoad, onError) => {
 	const img = new Image()
@@ -301,9 +304,26 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		})
 	}
 
-	// What counts as a change. A Tick, and a Ticker, which runs every Tick
-	// even while the Scene's paused, so a game's own Tickers are covered too.
-	scene.tickers.add(invalidate)
+	// What counts as a change. A Tick in which the Controllers moved, and the
+	// paused one after them, since what paused the Scene may have moved them
+	// too. A paused Tick otherwise only changes something if the game runs
+	// something of its own in it: its own Tickers or `afterEnterFrames`. A
+	// still Scene then doesn't repaint at all, which saves a phone's battery.
+	let movedLastTick = true
+	const tick = () => {
+		const moved = scene.isActive()
+		if (moved || movedLastTick || gameRunsWhilePaused()) invalidate()
+		movedLastTick = moved
+	}
+	const gameRunsWhilePaused = () => {
+		if (scene.options.afterEnterFrames) return true
+		for (const ticker of scene.tickers) {
+			if (!painterTicks.has(ticker)) return true
+		}
+		return false
+	}
+	painterTicks.add(tick)
+	scene.tickers.add(tick)
 	const disposeEffects = createRoot((dispose) => {
 		// The Renderer resizing, which clears the canvas
 		createEffect(() => {
@@ -352,7 +372,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	return {
 		dispose() {
 			disposeEffects()
-			scene.tickers.delete(invalidate)
+			scene.tickers.delete(tick)
 			if (frameRequest !== undefined) cancelAnimationFrame(frameRequest)
 		},
 	}
