@@ -42,8 +42,14 @@ const loadWithImg: ImageLoader = (url, onLoad) => {
 	img.src = url
 }
 
-/** `n` modulo `m`, never negative, as a repeating background wraps. */
-const wrap = (n: number, m: number) => ((n % m) + m) % m
+/**
+ * Where the copy of a repeating background that covers 0 starts, for one
+ * moved by `offset` and repeating every `size`: at 0 or before it.
+ */
+function firstCopy(offset: number, size: number) {
+	const into = ((offset % size) + size) % size
+	return into === 0 ? 0 : into - size
+}
 
 /**
  * Paints a Frame into the box (0, 0) to (width, height), as the DOM Sprite
@@ -69,14 +75,10 @@ function paintFrame(
 	if (!(sheetWidth > 0 && sheetHeight > 0)) return
 	const scaleX = loaded.width / sheetWidth
 	const scaleY = loaded.height / sheetHeight
-	// Where the copy of the sheet that covers the box's top left corner starts
-	const firstX = wrap(left, sheetWidth) - (wrap(left, sheetWidth) && sheetWidth)
-	const firstY =
-		wrap(top, sheetHeight) - (wrap(top, sheetHeight) && sheetHeight)
-	for (let y = firstY; y < height; y += sheetHeight) {
+	for (let y = firstCopy(top, sheetHeight); y < height; y += sheetHeight) {
 		const y0 = Math.max(y, 0)
 		const y1 = Math.min(y + sheetHeight, height)
-		for (let x = firstX; x < width; x += sheetWidth) {
+		for (let x = firstCopy(left, sheetWidth); x < width; x += sheetWidth) {
 			const x0 = Math.max(x, 0)
 			const x1 = Math.min(x + sheetWidth, width)
 			context.drawImage(
@@ -121,8 +123,14 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		return entry.loaded
 	}
 
-	/** Paints one Controller's Sprite into its own box, (0, 0) to its size. */
-	const paintSprite = (context: CanvasRenderingContext2D, c: AnyController) => {
+	/**
+	 * Paints a Controller's current Frame into its Sprite's own box, (0, 0) to
+	 * its size, leaving the context as it found it.
+	 */
+	const paintCurrentFrame = (
+		context: CanvasRenderingContext2D,
+		c: AnyController,
+	) => {
 		const sprite = c.sprite()
 		const frame = sprite.frames[c.currentFrame()]
 		if (frame === undefined) return
@@ -133,13 +141,17 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		// attached to it, about `inner.origin` or the middle, as the DOM
 		// Sprite's inner element does.
 		const { rotation, origin } = sprite.inner ?? {}
-		if (rotation) {
-			const { x, y } = origin ?? { x: sprite.width / 2, y: sprite.height / 2 }
-			context.translate(x, y)
-			context.rotate((rotation * Math.PI) / 180)
-			context.translate(-x, -y)
+		if (!rotation) {
+			paintFrame(context, loaded, frame, sprite.width, sprite.height)
+			return
 		}
+		const { x, y } = origin ?? { x: sprite.width / 2, y: sprite.height / 2 }
+		context.save()
+		context.translate(x, y)
+		context.rotate((rotation * Math.PI) / 180)
+		context.translate(-x, -y)
 		paintFrame(context, loaded, frame, sprite.width, sprite.height)
+		context.restore()
 	}
 
 	// The backing store is the Renderer's size in the screen's own pixels, so
@@ -210,7 +222,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			-view.y * density,
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
-		paintSprite(context, controller)
+		paintCurrentFrame(context, controller)
 	}
 
 	// A repaint at most once a display frame, and only once something has
