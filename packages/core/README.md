@@ -138,11 +138,37 @@ export const Game = () => <CanvasRenderer scene={scene} pixelated />
   for that sprite, and `auto` and `smooth` leave it to the Renderer's
   `pixelated` prop, which turns it off for every sprite whatever they say.
   Attached controllers inherit it, as they do on the page, unless they say
-  otherwise. It's only how the sprite is painted: a canvas scaled up by CSS
-  is smoothed as a whole unless the Renderer is `pixelated`.
+  otherwise. It's only how the sprite is painted: while the canvas is
+  stretched (see below), it's smoothed as a whole unless the Renderer is
+  `pixelated`.
 
 Anything else in `style`, a value it can't read (such as `var(--o)` or
 `1em`), `class`, `inner.style` and `children` are Canvas Issues.
+
+### Its size on the screen
+
+The canvas is painted at its size on the screen, in the screen's own pixels:
+the Renderer's size, times any CSS transform scaling it or anything it's in,
+times `devicePixelRatio`. So a game can scale its stage to fit the window, or
+zoom with `transform: scale(...)`, and its sprites stay as sharp as under the
+DOM Renderer. Frames and Draw Hooks still paint in the scene's pixels.
+
+- It's measured each time it's painted, and painted again when the window
+  resizes, the screen's density changes, the `style` or `class` of anything
+  the Renderer is in changes, or a CSS transition or animation on one of
+  them finishes.
+- A zoom animated with `scale()` doesn't reallocate the canvas every frame.
+  It's resized at once when it's a fifth bigger or smaller on the screen than
+  it's painted, and otherwise once its size has stayed put for a quarter of a
+  second. Till then, the browser stretches it a little.
+- It's never more than 16 million pixels, under the most an iPhone allows
+  one canvas. A Renderer that would need more is painted at a lower density,
+  a little soft.
+- Under a `pixelated` Renderer, or for a sprite that's `pixelated` itself,
+  a sprite that isn't rotated or skewed is painted from a whole pixel of the
+  screen, so the edges of pixel art aren't blended with what's behind them.
+- A rotated Renderer is painted at the size of the box around it on the
+  screen, which is more pixels than it needs.
 
 ### The Draw Hook
 
