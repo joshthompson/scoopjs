@@ -428,5 +428,16 @@ describe('Canvas Issues', () => {
 			frames.run()
 			expect(mounted).toEqual(['carrier', 'hat', 'late'])
 		})
+
+		it('for a part of a part too', () => {
+			const mounted: string[] = []
+			const onMount = ({ $ }: { $: ControllerBaseType }) => mounted.push($.id)
+			const arm = sprite('arm', { onMount })
+			arm.attach(sprite('hand', { onMount }))
+			const carrier = sprite('carrier', { onMount })
+			carrier.attach(arm)
+			paint([carrier])
+			expect(mounted).toEqual(['carrier', 'arm', 'hand'])
+		})
 	})
 })

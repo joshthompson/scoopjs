@@ -446,6 +446,34 @@ describe('the Canvas Renderer paints', () => {
 			frames.run(116)
 			expect(ctx.draws.map((d) => d.image)).toEqual(['a.png'])
 		})
+
+		it('after a Frame steps on a part of a part', () => {
+			loadAll('carrier', 'arm', 'a', 'b')
+			const hand = createController<ControllerBaseType>({
+				frames: ['a.png', 'b.png'],
+				init: () => ({
+					id: 'hand',
+					type: 'hand',
+					x: () => 0,
+					y: () => 0,
+					width: () => 10,
+					height: () => 10,
+					state: () => 'play',
+					frameInterval: () => 100,
+				}),
+			})
+			const arm = sprite('arm')
+			arm.attach(hand)
+			const carrier = sprite('carrier')
+			carrier.attach(arm)
+			const { ctx } = paint([carrier], { frameClock: 'display' })
+			frames.run(0)
+			frames.run(50)
+			ctx.reset()
+			frames.run(100)
+			frames.run(116)
+			expect(ctx.draws.map((d) => d.image)).toContain('a.png')
+		})
 	})
 
 	describe('with a Draw Hook', () => {

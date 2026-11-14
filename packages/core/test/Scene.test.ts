@@ -95,6 +95,19 @@ describe('Scene', () => {
 		s.destroy()
 	})
 
+	it('finds Attached Controllers however deep they are', async () => {
+		const carrier = walker('carrier')
+		const arm = walker('arm')
+		const hand = walker('hand')
+		arm.attach(hand)
+		carrier.attach(arm)
+		const s = await scene(carrier)
+		expect(s.getAllControllers()).toEqual([carrier, arm, hand])
+		expect(s.getControllerById('hand')).toBe(hand)
+		expect(s.getControllersByType('walker')).toEqual([carrier, arm, hand])
+		s.destroy()
+	})
+
 	it('finds the first controller with an id, and follows removals', async () => {
 		const first = walker('same')
 		const second = walker('same')

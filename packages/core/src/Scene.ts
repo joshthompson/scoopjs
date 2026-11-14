@@ -26,6 +26,16 @@ export type SceneComponent<T extends {} = any> = Component<
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 type AnyController = Controller<any>
 
+/**
+ * Every Controller attached to `carrier`, however deep: a hand on an arm on
+ * a runner is the runner's part too. Each straight after what carries it.
+ */
+function partsOf(carrier: AnyController): AnyController[] {
+	return carrier
+		.childControllers()
+		.flatMap((part) => [part, ...partsOf(part)])
+}
+
 export interface SceneOptions {
 	width: number
 	height: number
@@ -118,7 +128,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			dispose,
 			memo: createMemo(() => {
 				const top = this.controllers.get().map((c) => c.controller)
-				const all = [...top, ...top.flatMap((c) => c.childControllers())]
+				const all = [...top, ...top.flatMap(partsOf)]
 				const byId = new Map<string, AnyController>()
 				const byType = new Map<string, AnyController[]>()
 				for (const controller of all) {
