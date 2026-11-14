@@ -275,6 +275,18 @@ describe('controllersAt', () => {
 		s.destroy()
 	})
 
+	it('skips what is hidden, and what display: none hides with it', async () => {
+		const van = thing('van', { style: { display: 'none' } })
+		van.attach(thing('wheel'))
+		const s = await scene([
+			thing('ground'),
+			thing('ghost', { style: { visibility: 'hidden' } }),
+			van,
+		])
+		expect(ids(s.controllersAt({ x: 5, y: 5 }))).toEqual(['ground'])
+		s.destroy()
+	})
+
 	it('stacks them as the DOM Renderer does by assetOrder', async () => {
 		// The DOM Renderer draws the types listed first over those after them,
 		// and types it doesn't list over all of them.

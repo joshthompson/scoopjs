@@ -9,6 +9,10 @@
  * what each image was drawn with rather than replaying the calls itself. To
  * follow another property, add it to `State` and `initialState`; to follow
  * another method that changes the transform, add it to `transforms`.
+ *
+ * Every fake image is one colour all over, which is all the pixels a test
+ * needs to see an image recoloured. A context remembers the colour of what
+ * was last drawn on it, and of what was last put there with `putImageData`.
  */
 import { vi } from 'vitest'
 import type { ImageLoader } from '../../src/canvasPainter'
@@ -51,10 +55,18 @@ export interface Rect {
 	height: number
 }
 
+/** A colour as a canvas's pixels hold it: red, green, blue and alpha. */
+export type Colour = [number, number, number, number]
+
 /** One `drawImage`, whichever of its three forms was used. */
 export interface Draw {
-	/** The image's URL, as the fake images know it. */
+	/**
+	 * The image's URL, as the fake images know it. For a `<canvas>` it's the
+	 * URL of the image drawn on that canvas.
+	 */
 	image: string
+	/** The colour of what was drawn. */
+	colour: Colour
 	/** The part of the image drawn: all of it unless a source rect was given. */
 	source: Rect
 	/** Where it went, in the context's coordinates at the time. */
@@ -90,18 +102,29 @@ const transforms: Record<string, (m: Matrix, args: number[]) => Matrix> = {
 		}),
 }
 
+// Which context each canvas handed out, so drawing one canvas onto another
+// can say what was on it.
+const contextOf = new WeakMap<HTMLCanvasElement, RecordingContext>()
+
 /** A context that records every call and property set, and keeps state. */
 export class RecordingContext {
 	calls: Call[] = []
 	draws: Draw[] = []
 	state = initialState()
+	/** What's on the canvas: the image last drawn, and its colour. */
+	content: { image: string; colour: Colour } | undefined
 	private stack: State[] = []
 
-	constructor(readonly canvas: HTMLCanvasElement) {
+	constructor(
+		readonly canvas: HTMLCanvasElement,
+		options: RecordingOptions = {},
+	) {
+		contextOf.set(canvas, this)
 		// Every property in `State` is recorded when it's set, the transform
 		// aside, which only changes through methods.
 		for (const property of Object.keys(this.state)) {
 			if (property === 'transform') continue
+			if (property === 'filter' && options.filter === false) continue
 			Object.defineProperty(this, property, {
 				get: () => this.state[property as keyof State],
 				set: (value) => {
@@ -154,7 +177,11 @@ export class RecordingContext {
 
 	drawImage(drawn: CanvasImageSource, ...args: number[]) {
 		this.record('drawImage', [drawn, ...args])
-		const image = drawn as unknown as FakeImage
+		const image = drawn as unknown as FakeImage | HTMLCanvasElement
+		const content =
+			image instanceof HTMLCanvasElement
+				? contextOf.get(image)?.content
+				: { image: image.src, colour: image.colour }
 		const all = { x: 0, y: 0, width: image.width, height: image.height }
 		const rect = ([x, y, width, height]: number[]) => ({ x, y, width, height })
 		const [source, dest] =
@@ -163,26 +190,58 @@ export class RecordingContext {
 				: args.length === 4
 					? [all, rect(args)]
 					: [all, { ...all, x: args[0], y: args[1] }]
+		this.content = content
 		this.draws.push({
-			image: image.src,
+			image: content?.image ?? '',
+			colour: content?.colour ?? [0, 0, 0, 0],
 			source,
 			dest,
 			state: { ...this.state },
 		})
 	}
+
+	/** The pixels in a rectangle: all the colour of what's on the canvas. */
+	getImageData(x: number, y: number, width: number, height: number) {
+		this.record('getImageData', [x, y, width, height])
+		const data = new Uint8ClampedArray(width * height * 4)
+		for (let i = 0; i < data.length; i += 4) {
+			data.set(this.content?.colour ?? [0, 0, 0, 0], i)
+		}
+		return { width, height, data } as ImageData
+	}
+
+	/** Puts pixels on the canvas, which takes the colour of the first. */
+	putImageData(data: ImageData, ...args: number[]) {
+		this.record('putImageData', [data, ...args])
+		const [r, g, b, a] = data.data
+		this.content = { image: this.content?.image ?? '', colour: [r, g, b, a] }
+	}
+}
+
+/** How a recording context behaves. */
+export interface RecordingOptions {
+	/**
+	 * False for a context without `filter`, as WebKit's is. It has one
+	 * otherwise.
+	 */
+	filter?: boolean
 }
 
 /**
  * A recording context for `canvas`. Any method a canvas has that it doesn't
  * know yet is still recorded, so painting with it doesn't throw.
  */
-export function createRecordingContext(canvas: HTMLCanvasElement) {
-	const context = new RecordingContext(canvas)
+export function createRecordingContext(
+	canvas: HTMLCanvasElement,
+	options: RecordingOptions = {},
+) {
+	const context = new RecordingContext(canvas, options)
 	return new Proxy(context, {
 		get(target, key, receiver) {
 			if (typeof key !== 'string' || key in target) {
 				return Reflect.get(target, key, receiver)
 			}
+			if (key === 'filter') return undefined
 			return (...args: unknown[]) => target.record(key, args)
 		},
 	})
@@ -190,13 +249,14 @@ export function createRecordingContext(canvas: HTMLCanvasElement) {
 
 /**
  * Makes every `<canvas>` hand out a recording context, until the test ends.
+ * Calling it again changes how the contexts handed out from then on behave.
  * Gives back the contexts handed out so far, newest last.
  */
-export function recordCanvases() {
+export function recordCanvases(options: RecordingOptions = {}) {
 	const contexts: RecordingContext[] = []
 	vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
 		function (this: HTMLCanvasElement) {
-			const context = createRecordingContext(this)
+			const context = createRecordingContext(this, options)
 			contexts.push(context)
 			return context
 		} as unknown as typeof HTMLCanvasElement.prototype.getContext,
@@ -209,12 +269,15 @@ export interface FakeImage {
 	src: string
 	width: number
 	height: number
+	/** The one colour it is all over. */
+	colour: Colour
 }
 
 /**
  * Images that load when a test says so. Pass `loader` to the painter, then
- * `load(url, width, height)` to say an image has loaded at that natural size,
- * before or after the painter asks for it.
+ * `load(url, width, height, colour?)` to say an image has loaded at that
+ * natural size, before or after the painter asks for it. Each is white all
+ * over unless a test gives it another colour.
  */
 export function fakeImages() {
 	const loaded = new Map<string, FakeImage>()
@@ -236,8 +299,13 @@ export function fakeImages() {
 		loader,
 		/** Every URL the painter has asked to load, in order. */
 		requested,
-		load(url: string, width: number, height: number) {
-			const image = { src: url, width, height }
+		load(
+			url: string,
+			width: number,
+			height: number,
+			colour: Colour = [255, 255, 255, 255],
+		) {
+			const image = { src: url, width, height, colour }
 			loaded.set(url, image)
 			for (const done of waiting.get(url) ?? []) done(image)
 			waiting.delete(url)
