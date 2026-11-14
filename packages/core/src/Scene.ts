@@ -8,6 +8,7 @@ import {
 } from 'solid-js'
 import type { Controller } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
+import { type CanvasIssue, canvasIssuesOf } from './canvasIssues'
 import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
 import { drawnBox } from './geometry'
@@ -242,6 +243,16 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 				)
 			})
 			.reverse() as C[]
+	}
+
+	/**
+	 * Every Canvas Issue so far: what the Canvas Renderer has been asked to
+	 * draw and can't, once per Controller type and feature, as plain records
+	 * that can go straight to JSON. The same as it logs with `console.error`.
+	 * Empty under the DOM Renderer, which draws everything.
+	 */
+	canvasIssues(): CanvasIssue[] {
+		return canvasIssuesOf(this)
 	}
 
 	getSolidControllerRects(): Rect[] {

@@ -1,6 +1,7 @@
 import { type Accessor, createEffect, createRoot } from 'solid-js'
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
+import { reportControllerIssues } from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
@@ -221,6 +222,8 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		) {
 			return
 		}
+		// Reported the first time it's drawn, and only then: nothing marks it
+		reportControllerIssues(scene, controller)
 		context.setTransform(
 			density,
 			0,
