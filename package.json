@@ -12,6 +12,7 @@
 		"typecheck": "pnpm -r typecheck",
 		"lint": "biome check .",
 		"format": "biome format --write .",
+		"bench": "pnpm build && node bench/serve.mjs",
 		"changeset": "changeset",
 		"version-packages": "changeset version",
 		"release": "pnpm build && changeset publish"

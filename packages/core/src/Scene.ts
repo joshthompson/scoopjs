@@ -64,6 +64,14 @@ export interface SceneOptions {
 	 * Either way the Scene steps them, whichever Renderer draws it.
 	 */
 	frameClock?: 'tick' | 'display'
+	/**
+	 * For benchmarking only: draws no Sprite's `children`, under either
+	 * Renderer, and the Canvas Renderer doesn't report them. The two Renderers
+	 * then draw the same Frames and nothing else, so comparing them compares
+	 * how fast each draws, not how much. Not for shipping a game with. Off by
+	 * default.
+	 */
+	skipChildren?: boolean
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape

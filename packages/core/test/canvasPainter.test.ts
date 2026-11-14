@@ -1,10 +1,15 @@
 import { type JSX, createSignal } from 'solid-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type ControllerBaseType, createController } from '../src/Controller'
+import {
+	type ControllerBaseType,
+	type ControllerProps,
+	createController,
+} from '../src/Controller'
 import { Scene, type SceneOptions } from '../src/Scene'
 import { createCanvasPainter } from '../src/canvasPainter'
 import type { Matrix } from '../src/geometry'
 import {
+	type RecordingContext,
 	type State,
 	fakeImages,
 	recordCanvases,
@@ -440,6 +445,117 @@ describe('the Canvas Renderer paints', () => {
 			frames.run(100)
 			frames.run(116)
 			expect(ctx.draws.map((d) => d.image)).toEqual(['a.png'])
+		})
+	})
+
+	describe('with a Draw Hook', () => {
+		/** A Sprite like `sprite`'s, with `draw` as its Draw Hook. */
+		function hooked(
+			id: string,
+			draw: ControllerProps<ControllerBaseType>['draw'],
+			options: { x?: number; frames?: string[]; frame?: number } = {},
+		) {
+			return createController<ControllerBaseType>({
+				frames: options.frames ?? [`${id}.png`],
+				draw,
+				init: () => ({
+					id,
+					type: id,
+					x: () => options.x ?? 0,
+					y: () => 0,
+					width: () => 20,
+					height: () => 10,
+					rotation: () => 90,
+					frame: () => options.frame,
+				}),
+			})
+		}
+
+		it("given a context already in the Sprite's box", () => {
+			loadAll('box')
+			const transforms: Matrix[] = []
+			const { ctx } = paint(
+				[
+					hooked('box', ({ ctx: hookCtx }) => {
+						transforms.push(
+							(hookCtx as unknown as RecordingContext).state.transform,
+						)
+					}),
+				],
+				{ x: 5 },
+			)
+			frames.run()
+			// The same transform the Frame would have been painted with
+			expect(transforms.map(rounded)).toEqual([
+				{ a: 0, b: 1, c: -1, d: 0, e: 10, f: -5 },
+			])
+			expect(ctx.draws).toEqual([])
+		})
+
+		it('able to paint the current Frame with drawDefault(), then draw over it', () => {
+			loadAll('a', 'b')
+			const seen: unknown[] = []
+			const flag = hooked(
+				'flag',
+				({ ctx: hookCtx, drawDefault, $, $scene, $currentFrame }) => {
+					seen.push({ id: $.id, scene: $scene.id, $currentFrame })
+					drawDefault()
+					hookCtx.fillRect(0, 0, 20, 2)
+				},
+				{ frames: ['a.png', 'b.png'], frame: 1 },
+			)
+			const { ctx } = paint([flag])
+			frames.run()
+			expect(seen).toEqual([{ id: 'flag', scene: 'test', $currentFrame: 1 }])
+			expect(ctx.draws.map(({ image, dest }) => ({ image, dest }))).toEqual([
+				{ image: 'b.png', dest: { x: 0, y: 0, width: 20, height: 10 } },
+			])
+			expect(rounded(ctx.draws[0].state.transform)).toEqual({
+				a: 0,
+				b: 1,
+				c: -1,
+				d: 0,
+				e: 15,
+				f: -5,
+			})
+			expect(ctx.methods().slice(-3)).toEqual([
+				'drawImage',
+				'fillRect',
+				'restore',
+			])
+		})
+
+		it('with its Attached Controllers painted after it, untouched by what it set', () => {
+			loadAll('rider', 'sun')
+			const kart = hooked('kart', ({ ctx: hookCtx }) => {
+				hookCtx.globalAlpha = 0.2
+				hookCtx.translate(100, 100)
+				hookCtx.fillRect(0, 0, 20, 10)
+			})
+			kart.attach(sprite('rider'))
+			const { ctx } = paint([kart, sprite('sun', { x: 50 })])
+			frames.run()
+			expect(
+				ctx.methods().filter((m) => m === 'fillRect' || m === 'drawImage'),
+			).toEqual(['fillRect', 'drawImage', 'drawImage'])
+			expect(
+				ctx.draws.map(({ image, state }) => ({
+					image,
+					alpha: state.globalAlpha,
+					transform: rounded(state.transform),
+				})),
+			).toEqual([
+				{
+					image: 'rider.png',
+					alpha: 1,
+					transform: { a: 0, b: 1, c: -1, d: 0, e: 15, f: -5 },
+				},
+				{
+					image: 'sun.png',
+					alpha: 1,
+					transform: { a: 1, b: 0, c: 0, d: 1, e: 50, f: 0 },
+				},
+			])
 		})
 	})
 
