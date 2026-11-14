@@ -1,5 +1,5 @@
 import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import {
 	mountWithoutElement,
@@ -9,12 +9,10 @@ import {
 } from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
+import { type ParsedFrame, parseFrame } from './frames'
 import { boxAround, spriteTransform } from './geometry'
-import { canvasStyle } from './styleTranslator'
+import { effectiveStyle } from './styleTranslator'
 import type { Rect } from './types'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /** An image ready to paint, with its natural size. */
 export interface LoadedImage {
@@ -41,6 +39,9 @@ export interface CanvasPainterOptions {
 	/** How images load: the browser's own way unless a test says otherwise. */
 	loadImage?: ImageLoader
 }
+
+// Every painter's own Ticker, which are no reason for another to repaint
+const painterTicks = new WeakSet<() => void>()
 
 /** Loads an image as the page would, with an `<img>`. */
 const loadWithImg: ImageLoader = (url, onLoad, onError) => {
@@ -73,12 +74,11 @@ function firstCopy(offset: number, size: number) {
 function paintFrame(
 	context: CanvasRenderingContext2D,
 	loaded: LoadedImage,
-	frame: string,
+	frame: ParsedFrame,
 	width: number,
 	height: number,
 ) {
-	const [left = 0, top = 0, cropWidth, cropHeight] =
-		frame.split('#')[1]?.split(',').map(Number) ?? []
+	const { x: left, y: top, width: cropWidth, height: cropHeight } = frame
 	const cropped = !!cropWidth && !!cropHeight
 	const sheetHeight = height
 	const sheetWidth = cropped ? (loaded.width * height) / loaded.height : width
@@ -151,14 +151,14 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	 */
 	const paintCurrentFrame = (
 		context: CanvasRenderingContext2D,
-		c: AnyController,
+		controller: AnyController,
 	) => {
-		const sprite = c.sprite()
-		const frame = sprite.frames[c.currentFrame()]
-		if (frame === undefined) return
-		const [url] = frame.split('#')
-		const resolved = scene.resolveAsset(url)
-		const original = image(resolved, c)
+		const sprite = controller.sprite()
+		const written = sprite.frames[controller.currentFrame()]
+		if (written === undefined) return
+		const frame = parseFrame(written)
+		const resolved = scene.resolveAsset(frame.url)
+		const original = image(resolved, controller)
 		if (!original) return
 		// Recoloured by the style's filter, where the context can't do it
 		const loaded = filters?.image(resolved, original) ?? original
@@ -200,7 +200,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		// screen, which nothing else says: it's a cheap thing to check.
 		if ((window.devicePixelRatio || 1) !== density) resize()
 		const camera = scene.canvas.get()
-		const view = {
+		const cameraRect = {
 			x: camera.x(),
 			y: camera.y(),
 			width: camera.width(),
@@ -211,32 +211,32 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		// Set every paint, since resizing a canvas resets it
 		ctx.imageSmoothingEnabled = !options.pixelated?.()
 		for (const controller of drawOrder(scene)) {
-			paintController(ctx, controller, view)
+			paintController(ctx, controller, cameraRect)
 		}
 	}
 
 	/**
-	 * Paints one Controller, unless it's outside the view. Each entry in the
+	 * Paints one Controller, unless it's outside what the camera sees. Each entry in the
 	 * draw order carries its whole transform, carriers and all, so it starts
 	 * from the camera every time rather than nesting inside its carrier.
 	 */
 	const paintController = (
 		context: CanvasRenderingContext2D,
 		controller: AnyController,
-		view: Rect,
+		cameraRect: Rect,
 	) => {
-		const style = canvasStyle(controller)
+		const style = effectiveStyle(controller)
 		if (style.hidden) return
 		const m = spriteTransform(controller)
-		// Nothing outside the view costs anything to paint. Each part is
+		// Nothing the camera doesn't see costs anything to paint. Each part is
 		// checked on its own, since one can reach out past its carrier.
 		const { width, height } = controller.sprite()
 		const box = boxAround(m, width, height)
 		if (
-			box.x >= view.x + view.width ||
-			box.y >= view.y + view.height ||
-			box.x + box.width <= view.x ||
-			box.y + box.height <= view.y
+			box.x >= cameraRect.x + cameraRect.width ||
+			box.y >= cameraRect.y + cameraRect.height ||
+			box.x + box.width <= cameraRect.x ||
+			box.y + box.height <= cameraRect.y
 		) {
 			return
 		}
@@ -247,8 +247,8 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			0,
 			0,
 			density,
-			-view.x * density,
-			-view.y * density,
+			-cameraRect.x * density,
+			-cameraRect.y * density,
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
 		filters?.apply(style, m, density)
@@ -301,9 +301,26 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		})
 	}
 
-	// What counts as a change. A Tick, and a Ticker, which runs every Tick
-	// even while the Scene's paused, so a game's own Tickers are covered too.
-	scene.tickers.add(invalidate)
+	// What counts as a change. A Tick in which the Controllers moved, and the
+	// paused one after them, since what paused the Scene may have moved them
+	// too. A paused Tick otherwise only changes something if the game runs
+	// something of its own in it: its own Tickers or `afterEnterFrames`. A
+	// still Scene then doesn't repaint at all, which saves a phone's battery.
+	let movedLastTick = true
+	const tick = () => {
+		const moved = scene.isActive()
+		if (moved || movedLastTick || gameRunsWhilePaused()) invalidate()
+		movedLastTick = moved
+	}
+	const gameRunsWhilePaused = () => {
+		if (scene.options.afterEnterFrames) return true
+		for (const ticker of scene.tickers) {
+			if (!painterTicks.has(ticker)) return true
+		}
+		return false
+	}
+	painterTicks.add(tick)
+	scene.tickers.add(tick)
 	const disposeEffects = createRoot((dispose) => {
 		// The Renderer resizing, which clears the canvas
 		createEffect(() => {
@@ -352,7 +369,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	return {
 		dispose() {
 			disposeEffects()
-			scene.tickers.delete(invalidate)
+			scene.tickers.delete(tick)
 			if (frameRequest !== undefined) cancelAnimationFrame(frameRequest)
 		},
 	}

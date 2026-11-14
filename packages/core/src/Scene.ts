@@ -6,13 +6,14 @@ import {
 	createMemo,
 	createRoot,
 } from 'solid-js'
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
 import { type CanvasIssue, canvasIssuesOf } from './canvasIssues'
 import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
+import { parseFrame } from './frames'
 import { drawnBox } from './geometry'
-import { canvasStyle } from './styleTranslator'
+import { effectiveStyle } from './styleTranslator'
 import type { Rect, Vector } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
@@ -23,8 +24,13 @@ export type SceneComponent<T extends {} = any> = Component<
 	} & T
 >
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
+/**
+ * Every Controller attached to `carrier`, however deep: a hand on an arm on
+ * a runner is the runner's part too. Each straight after what carries it.
+ */
+function partsOf(carrier: AnyController): AnyController[] {
+	return carrier.childControllers().flatMap((part) => [part, ...partsOf(part)])
+}
 
 export interface SceneOptions {
 	width: number
@@ -75,8 +81,7 @@ export interface SceneOptions {
 	skipChildren?: boolean
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-export class Scene<C extends Controller<any> = Controller<any>> {
+export class Scene<C extends AnyController = AnyController> {
 	interval: number
 	private animationFrame: number | undefined
 	/** How long a tick is, in milliseconds. */
@@ -117,8 +122,8 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 		const lookup = createRoot((dispose) => ({
 			dispose,
 			memo: createMemo(() => {
-				const top = this.controllers.get().map((c) => c.controller)
-				const all = [...top, ...top.flatMap((c) => c.childControllers())]
+				const top = this.controllers.get().map(({ controller }) => controller)
+				const all = [...top, ...top.flatMap(partsOf)]
 				const byId = new Map<string, AnyController>()
 				const byType = new Map<string, AnyController[]>()
 				for (const controller of all) {
@@ -213,27 +218,25 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 		return this.lookup().all
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllerById<T = Controller<any>>(id: string) {
+	getControllerById<T = AnyController>(id: string) {
 		return this.lookup().byId.get(id) as T | undefined
 	}
 
 	/** Shared between callers, so don't change the array you get back. */
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllersByType<T = Controller<any>>(type: string) {
+	getControllersByType<T = AnyController>(type: string) {
 		return (this.lookup().byType.get(type) ?? []) as T[]
 	}
 
 	/**
-	 * The Controllers drawn over `point`, topmost first, whichever Renderer
-	 * draws them. Those hidden by their style, or by a carrier's, aren't
+	 * The Pointer Pick: the Controllers drawn over `point`, topmost first,
+	 * whichever Renderer draws them. Those hidden by their style, or by a carrier's, aren't
 	 * drawn, so they're left out. `point` is in the scene's coordinates, as
 	 * the Renderers' `onClick`, `onMouseDown` and `onMouseUp` give it.
 	 */
 	controllersAt(point: Vector): C[] {
 		return drawOrder(this)
 			.filter((controller) => {
-				if (canvasStyle(controller).hidden) return false
+				if (effectiveStyle(controller).hidden) return false
 				const box = drawnBox(controller)
 				return (
 					point.x >= box.x &&
@@ -326,7 +329,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			.get()
 			.flatMap(({ controller }) => controller.frames ?? [])
 			// Preload whichever variant Sprite will actually render
-			.map((frame) => this.resolveAsset(frame.split('#')[0]))
+			.map((frame) => this.resolveAsset(parseFrame(frame).url))
 
 		const imageAssets = [
 			...new Set([...frameAssets, ...(this.options.images ?? [])]),

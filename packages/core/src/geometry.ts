@@ -1,8 +1,6 @@
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
+import { absent, angle, length } from './cssValues'
 import type { Rect, Vector } from './types'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /**
  * A 2D transform, laid out as `DOMMatrix` and a canvas's `setTransform` take
@@ -57,35 +55,37 @@ function apply(m: Matrix, x: number, y: number) {
 	return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }
 }
 
-/** A CSS length in pixels, with percentages of `size`. */
-function length(value: string, size: number) {
-	if (value.endsWith('%')) return (Number.parseFloat(value) / 100) * size
-	if (value.endsWith('px')) return Number.parseFloat(value)
-	// Only a bare 0 is a length without a unit
-	return Number(value) === 0 ? 0 : undefined
-}
+/**
+ * The `transform` functions a canvas draws: the `translate`, `scale`,
+ * `rotate` and `skew` families. Any other is a Canvas Issue.
+ */
+const translatedTransforms = [
+	'translate',
+	'translateX',
+	'translateY',
+	'scale',
+	'scaleX',
+	'scaleY',
+	'rotate',
+	'skew',
+	'skewX',
+	'skewY',
+] as const
 
-const turns: Record<string, number> = {
-	deg: 1,
-	rad: 180 / Math.PI,
-	grad: 0.9,
-	turn: 360,
-}
+type TranslatedTransform = (typeof translatedTransforms)[number]
 
-/** A CSS angle in degrees. */
-export function angle(value: string) {
-	const unit = value.match(/[a-z]+$/)?.[0]
-	if (!unit) return Number(value) === 0 ? 0 : undefined
-	const scale = turns[unit]
-	return scale === undefined ? undefined : Number.parseFloat(value) * scale
-}
+/** Whether `name` is a `transform` function a canvas draws. */
+export const isTranslatedTransform = (
+	name: string,
+): name is TranslatedTransform =>
+	(translatedTransforms as readonly string[]).includes(name)
 
 /**
- * One function of a CSS `transform`, or nothing for one outside the
- * `translate`, `scale`, `rotate` and `skew` families.
+ * One function of a CSS `transform`, or nothing for one whose arguments it
+ * can't read.
  */
 function transformFunction(
-	name: string,
+	name: TranslatedTransform,
 	args: string[],
 	width: number,
 	height: number,
@@ -153,7 +153,9 @@ function parseTransform(value: string, width: number, height: number) {
 			.split(/[\s,]+/)
 			.map((arg) => arg.trim())
 			.filter(Boolean)
-		const step = transformFunction(name, parts, width, height)
+		const step = isTranslatedTransform(name)
+			? transformFunction(name, parts, width, height)
+			: undefined
 		if (step) matrix = multiply(matrix, step)
 		else unsupported.push(name)
 	}
@@ -210,6 +212,39 @@ function parseOrigin(
 }
 
 /**
+ * The separate `translate` property, as CSS reads it: `none`, or an x and
+ * maybe a y, each a length or a percentage. A z is left out, since a canvas
+ * is flat. Anything else is undefined.
+ */
+function parseTranslate(
+	value: string,
+	width: number,
+	height: number,
+): Vector | undefined {
+	if (value.trim() === 'none') return { x: 0, y: 0 }
+	const [first, second = '0'] = value.trim().split(/\s+/)
+	const x = length(first, width)
+	const y = length(second, height)
+	return x === undefined || y === undefined ? undefined : { x, y }
+}
+
+/**
+ * The keys of a style that place its Sprite, `translate` and
+ * `transform-origin`, whose values can't be read, which are Canvas Issues.
+ */
+export function unreadablePlacement(
+	style: Record<string, unknown>,
+): ('translate' | 'transform-origin')[] {
+	const readers = { translate: parseTranslate, 'transform-origin': parseOrigin }
+	return (['translate', 'transform-origin'] as const).filter((key) => {
+		const value = style[key]
+		if (absent(value)) return false
+		// Its size makes no difference to whether it can be read
+		return typeof value !== 'string' || !readers[key](value, 1, 1)
+	})
+}
+
+/**
  * How far parallax leaves a Controller from where its x and y say. With no
  * parallax (1) it moves with the scene. With less, the camera moves it less
  * than the rest, so against the scene it drifts along with the camera, by
@@ -250,16 +285,14 @@ export function spriteTransform(controller: AnyController): Matrix {
 			: scaling(sprite.xScale ?? 1, sprite.yScale ?? 1)
 	// The separate `translate` property moves it on the screen, outside its
 	// rotation, as CSS has it.
-	const [moveX = '0', moveY = '0'] =
-		typeof style.translate === 'string'
-			? style.translate.trim().split(/\s+/)
-			: []
+	const move = (typeof style.translate === 'string' &&
+		parseTranslate(style.translate, width, height)) || { x: 0, y: 0 }
 	const shift = carrier
 		? { x: 0, y: 0 }
 		: parallaxOffset(controller, sprite.parallax ?? 1)
 	const local = [
 		translation(sprite.x + shift.x, sprite.y + shift.y),
-		translation(length(moveX, width) ?? 0, length(moveY, height) ?? 0),
+		translation(move.x, move.y),
 		translation(origin.x, origin.y),
 		rotation(sprite.rotation ?? 0),
 		transform,

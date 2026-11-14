@@ -3,27 +3,28 @@
  * Canvas Renderer, which is the only thing that finds them. The Scene serves
  * them back through `canvasIssues()` without knowing what drew it.
  */
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import { childrenToDraw } from './children'
+import { absent } from './cssValues'
+import { isTranslatedTransform } from './geometry'
 import { translateStyle } from './styleTranslator'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /** Something a Controller asks for that the Canvas Renderer can't draw. */
 export interface CanvasIssue {
 	/**
 	 * What can't be drawn: `children`, `class`, `inner.style`, a `style` key
 	 * such as `style.clip-path`, a function in one such as
-	 * `style.filter blur`, `$ref`, or one of the Scene's own options such as
-	 * `scene.cameraLayer`.
+	 * `style.filter blur`, `$ref`, `image` for an image that fails to load,
+	 * or one of the Scene's own options such as `scene.cameraLayer`.
 	 */
 	feature: string
 	/** The type of Controller that asks for it, unless the Scene does. */
 	type?: string
 	/** One Controller of that type that asks for it. */
 	id?: string
+	/** The image that failed to load, for an `image` issue. */
+	url?: string
 	/** Where that Controller was created, as a file and line. */
 	createdAt?: string
 	/** How to fix it, where there's a way. */
@@ -125,6 +126,7 @@ function describeIssue(scene: Scene, issue: CanvasIssue) {
 			: `on type "${issue.type}" (id "${issue.id}")`
 	return [
 		`${prefix} unsupported ${issue.feature} ${on}`,
+		issue.url && `  url: ${issue.url}`,
 		issue.createdAt && `  created at ${issue.createdAt}`,
 		issue.fix && `  fix: ${issue.fix}`,
 	]
@@ -149,7 +151,11 @@ export function reportSceneIssues(scene: Scene) {
 	}
 }
 
-/** Reports that `url`, which `controller` shows as a Frame, can't be loaded. */
+/**
+ * Reports that `url`, which `controller` shows as a Frame, can't be loaded:
+ * once for its type, however many of its images can't, since one is enough
+ * to say where to look.
+ */
 export function reportMissingImage(
 	scene: Scene,
 	controller: AnyController,
@@ -158,8 +164,9 @@ export function reportMissingImage(
 	reportIssueOf(
 		scene,
 		controller,
-		`image ${url}`,
+		'image',
 		"check the image is where the URL says, and what the Scene's resolveAsset gives for it",
+		url,
 	)
 }
 
@@ -169,11 +176,13 @@ function reportIssueOf(
 	controller: AnyController,
 	feature: string,
 	fix?: string,
+	url?: string,
 ) {
 	reportCanvasIssue(scene, {
 		feature,
 		type: controller.type,
 		id: controller.id,
+		url,
 		// Only worked out for an issue it hasn't reported already
 		get createdAt() {
 			return createdAt(controller)
@@ -242,8 +251,12 @@ export function reportControllerIssues(
 			report(`style.filter ${written}`, filterFixes[name] ?? drawHook)
 		}
 	}
-	// Where the Sprite is drawn, which a Draw Hook's context is moved by
-	// already, so these are still reported with one.
+	// Where the Sprite is drawn, and its alpha, which a Draw Hook's context
+	// is set to already, so these are still reported with one.
+	for (const key of style.unreadable) {
+		const value = (sprite.style as Record<string, unknown>)[key]
+		report(`style.${key} ${String(value)}`, unreadableFixes[key])
+	}
 	for (const name of style.unsupportedTransforms) {
 		report(`style.transform ${name}()`, transformFix(name))
 	}
@@ -257,6 +270,15 @@ const filterFixes: Record<string, string> = {
 		'a canvas casts one drop-shadow, its lengths in px: keep one, or draw the rest in a Draw Hook',
 }
 
+/** How to write a translated `style` key's value so a canvas can read it. */
+const unreadableFixes: Record<string, string> = {
+	opacity: 'give it a number or a percentage, which a canvas can read',
+	'z-index': 'give it a whole number, which a canvas can read',
+	translate: 'give it lengths in px or %, which a canvas can read',
+	'transform-origin':
+		'give it lengths in px or % or keywords such as left and top, which a canvas can read',
+}
+
 /** How to do without a `transform` function a canvas doesn't draw. */
 function transformFix(name: string) {
 	if (name === 'matrix') {
@@ -266,15 +288,11 @@ function transformFix(name: string) {
 	if (/^(rotate[XY]|translateZ|scaleZ|perspective)$|3d$/.test(name)) {
 		return 'a canvas is flat: leave it out, or fake it with scale or skew'
 	}
-	if (/^(translate|scale|skew)[XY]?$|^rotate$/.test(name)) {
+	if (isTranslatedTransform(name)) {
 		return 'give it arguments a canvas can read: lengths in px or %, angles with a unit'
 	}
 	return 'use translate, scale, rotate or skew, which are translated'
 }
-
-/** A value that's been left out, as Solid leaves it off the page. */
-const absent = (value: unknown) =>
-	value === undefined || value === null || value === ''
 
 /** Draws it in a Draw Hook: the fix for most of what a canvas can't. */
 const drawHook = 'draw it in a Draw Hook'

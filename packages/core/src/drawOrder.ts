@@ -1,9 +1,6 @@
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import { zIndex } from './styleTranslator'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /**
  * A Scene's own Controllers, not the attached ones, in `assetOrder`: the

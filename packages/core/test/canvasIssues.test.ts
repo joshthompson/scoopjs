@@ -299,6 +299,57 @@ describe('Canvas Issues', () => {
 			])
 		})
 
+		it('not style keys left without a value, as the page leaves them out', () => {
+			const scene = paint([
+				sprite('a', { style: { 'clip-path': undefined, 'border-radius': '' } }),
+			])
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('each filter function whose arguments it cannot read', () => {
+			const scene = paint([
+				sprite('a', {
+					type: 'a',
+					style: {
+						filter:
+							'hue-rotate(30deg) brightness(-1) drop-shadow(1em 1em) contrast(2) url(#glow)',
+					},
+				}),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'style.filter brightness()',
+				'style.filter drop-shadow()',
+				'style.filter contrast()',
+				'style.filter url()',
+			])
+		})
+
+		it('any drop-shadow after the first, since a canvas casts only one', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						filter: 'drop-shadow(1px 0 white) drop-shadow(-1px 0 white)',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{
+					feature: 'style.filter drop-shadow()',
+					fix: 'a canvas casts one drop-shadow, its lengths in px: keep one, or draw the rest in a Draw Hook',
+				},
+			])
+		})
+
+		it('a filter it cannot read at all, as it is written, but not none', () => {
+			const scene = paint([
+				sprite('a', { style: { filter: 'sepia(1) glow' } }),
+				sprite('b', { style: { filter: 'none' } }),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'style.filter glow',
+			])
+		})
+
 		it('each transform function outside the supported set', () => {
 			const scene = paint([
 				sprite('a', {
@@ -311,6 +362,62 @@ describe('Canvas Issues', () => {
 				'style.transform matrix()',
 				'style.transform rotateX()',
 			])
+		})
+
+		it('each translated style key whose value it cannot read, with the value', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						translate: '1em 2em',
+						opacity: 'var(--o)',
+						'transform-origin': 'calc(10px)',
+						'z-index': 'var(--z)',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{
+					feature: 'style.opacity var(--o)',
+					fix: 'give it a number or a percentage, which a canvas can read',
+				},
+				{
+					feature: 'style.z-index var(--z)',
+					fix: 'give it a whole number, which a canvas can read',
+				},
+				{
+					feature: 'style.translate 1em 2em',
+					fix: 'give it lengths in px or %, which a canvas can read',
+				},
+				{
+					feature: 'style.transform-origin calc(10px)',
+					fix: 'give it lengths in px or % or keywords such as left and top, which a canvas can read',
+				},
+			])
+		})
+
+		it('none for translated style keys it can read', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						translate: 'none',
+						opacity: '50%',
+						'transform-origin': 'right 20%',
+						'z-index': 'auto',
+						visibility: 'visible',
+						display: 'block',
+						filter: 'none',
+					},
+				}),
+				sprite('b', {
+					style: {
+						translate: '-5px',
+						opacity: 1,
+						'transform-origin': '0 0',
+						'z-index': 3,
+					},
+				}),
+			])
+			expect(scene.canvasIssues()).toEqual([])
 		})
 	})
 
@@ -348,17 +455,54 @@ describe('Canvas Issues', () => {
 		})
 	})
 
-	it('for a Frame whose image fails to load, naming the image', () => {
-		const scene = paint([
-			sprite('a', { type: 'tree', frames: ['missing.png#0,0,10,10'] }),
-		])
-		images.fail('missing.png')
-		expect(reported(scene)).toEqual([
-			{
-				feature: 'image missing.png',
-				fix: "check the image is where the URL says, and what the Scene's resolveAsset gives for it",
-			},
-		])
+	describe('for a Frame whose image fails to load', () => {
+		const fix =
+			"check the image is where the URL says, and what the Scene's resolveAsset gives for it"
+
+		it('as image, with the URL in the record and on the console', () => {
+			const scene = paint([
+				sprite('a', { type: 'tree', frames: ['missing.png#0,0,10,10'] }),
+			])
+			images.fail('missing.png')
+			expect(scene.canvasIssues()).toEqual([
+				{
+					feature: 'image',
+					type: 'tree',
+					id: 'a',
+					url: 'missing.png',
+					createdAt: expect.any(String),
+					fix,
+				},
+			])
+			expect(logged()[0].split('\n')).toEqual([
+				'[scoopjs:canvas] unsupported image on type "tree" (id "a")',
+				'  url: missing.png',
+				expect.stringMatching(/^ {2}created at /),
+				`  fix: ${fix}`,
+			])
+		})
+
+		it('once for each Controller type, however many images fail', () => {
+			const scene = paint([
+				sprite('a', { type: 'tree', frames: ['oak.png', 'elm.png'] }),
+				sprite('b', { type: 'tree', frames: ['elm.png'] }),
+				sprite('c', { type: 'rock', frames: ['elm.png'] }),
+			])
+			images.fail('oak.png')
+			images.fail('elm.png')
+			vi.advanceTimersByTime(10)
+			frames.run()
+			expect(
+				scene.canvasIssues().map(({ feature, type, url }) => ({
+					feature,
+					type,
+					url,
+				})),
+			).toEqual([
+				{ feature: 'image', type: 'tree', url: 'oak.png' },
+				{ feature: 'image', type: 'rock', url: 'elm.png' },
+			])
+		})
 	})
 
 	describe("for the Scene's DOM-only options", () => {
@@ -427,6 +571,17 @@ describe('Canvas Issues', () => {
 			scene.addController(sprite('late', { onMount }))
 			frames.run()
 			expect(mounted).toEqual(['carrier', 'hat', 'late'])
+		})
+
+		it('for a part of a part too', () => {
+			const mounted: string[] = []
+			const onMount = ({ $ }: { $: ControllerBaseType }) => mounted.push($.id)
+			const arm = sprite('arm', { onMount })
+			arm.attach(sprite('hand', { onMount }))
+			const carrier = sprite('carrier', { onMount })
+			carrier.attach(arm)
+			paint([carrier])
+			expect(mounted).toEqual(['carrier', 'arm', 'hand'])
 		})
 	})
 })

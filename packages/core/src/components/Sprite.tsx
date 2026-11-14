@@ -11,11 +11,11 @@ import {
 	onMount,
 	useContext,
 } from 'solid-js'
-import type { Controller } from '../Controller'
+import type { AnyController } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
 import { childrenToDraw } from '../children'
-import { createFrameStepper } from '../frames'
+import { createFrameStepper, frameInterval, parseFrame } from '../frames'
 import type { Vector } from '../types'
 
 export interface Sprite {
@@ -55,8 +55,7 @@ export interface Sprite {
 	/** Told each Frame a Sprite steps to itself, without a Controller. */
 	onChangeFrame?: (frameIndex: number) => void
 	onMount?: (data: { $ref: HTMLDivElement | undefined }) => void
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controllers?: Accessor<Controller<any>[]>
+	controllers?: Accessor<AnyController[]>
 }
 
 // One clock for every Sprite without a Controller on `frameClock: 'display'`,
@@ -90,10 +89,7 @@ function createFallbackStepper(
 ) {
 	const { currentFrame, step } = createFrameStepper({
 		frameCount: () => props.frames.length,
-		frameInterval: () =>
-			typeof props.frameInterval === 'function'
-				? props.frameInterval()
-				: (props.frameInterval ?? 100),
+		frameInterval: () => frameInterval(props.frameInterval),
 		playing: () => props.state === 'play',
 		frame: () => props.frame,
 		randomStartFrame: props.randomStartFrame,
@@ -132,17 +128,13 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 			: () => props.currentFrame ?? 0
 	const frames = createMemo(() =>
 		props.frames.map((frame) => {
-			// Every sprite goes through here, so this is where a game's
-			// `resolveAsset` swaps in whichever image it wants shown.
-			const image = scene.resolveAsset(frame.split('#')[0])
-			const [left, top, width, height] = frame
-				.split('#')[1]
-				?.split(',')
-				.map(Number) ?? [0, 0, 0, 0]
+			const { url, x, y, width, height } = parseFrame(frame)
 			return {
-				image,
-				left,
-				top,
+				// Every sprite goes through here, so this is where a game's
+				// `resolveAsset` swaps in whichever image it wants shown.
+				image: scene.resolveAsset(url),
+				left: x,
+				top: y,
 				width,
 				height,
 			}
@@ -268,8 +260,7 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
  * reads itself.
  */
 export function ControllerSprite(props: {
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controller: Controller<any>
+	controller: AnyController
 	active?: boolean
 	fixed?: boolean
 }) {

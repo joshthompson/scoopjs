@@ -68,12 +68,21 @@ export const Game = () => <DomRenderer scene={scene} />
 - **`DomRenderer`** draws a scene, each sprite as page elements of its own,
   not a `<canvas>`. Pass `style` to change its background, which is white by
   default. It was called `Canvas`, and that name still works until 1.0.
+- **`CanvasRenderer`** draws a scene by painting every sprite onto one
+  `<canvas>`, with the game's UI still page elements over and under it. It
+  takes the same props as `DomRenderer`, plus `pixelated`, which turns image
+  smoothing off so pixel art stays crisp when it's scaled. See
+  [Choosing a Renderer](#choosing-a-renderer).
 - **`Sprite`** is how a controller looks: its frames (image URLs, optionally
   `url#left,top,width,height` for part of a sprite sheet), size, scale and
   rotation.
 - **`Key`** gives keyboard state as signals: `Key.isDown('ArrowLeft')`.
 - **`blockBySolids`** and **`isOverlapping`** handle collisions.
-  `hitTest` compares two controllers' own rects, never the page.
+  `hitTest` compares where two controllers are drawn, never the page.
+- **`scene.controllersAt(point)`** is the Pointer Pick: the controllers drawn
+  over a point, topmost first, leaving out any hidden by their style. `point`
+  is in the coordinates the Renderer's `onClick`, `onMouseDown` and
+  `onMouseUp` give, so it gives the same answer under either Renderer.
 
 ### Options a game passes in
 
@@ -81,16 +90,100 @@ export const Game = () => <DomRenderer scene={scene} />
   actually show, such as a seasonal version of it.
 - **`--scoopjs-modal-backdrop`** is the CSS colour behind `scene.modal`. Set it
   on your renderer (`transparent` for none).
-- **`cameraLayer`** (on `Scene`) moves one layer by the camera instead of every
-  sprite, which is cheaper with a lot of sprites. A sprite's `z-index` then only
-  orders it among the other sprites.
-- **`standbyFrames`** (on `Scene`) keeps every image a sprite switches between
-  painted, so switching to one doesn't flash blank while it decodes.
+- **`cameraLayer`** (on `Scene`, DOM Renderer only) moves one layer by the
+  camera instead of every sprite, which is cheaper with a lot of sprites. A
+  sprite's `z-index` then only orders it among the other sprites.
+- **`standbyFrames`** (on `Scene`, DOM Renderer only) keeps every image a
+  sprite switches between painted, so switching to one doesn't flash blank
+  while it decodes.
 - **`frameClock`** (on `Scene`) is what sprites step through their frames on:
   the scene's tick (`'tick'`, the default) or the screen's refresh
   (`'display'`), for frame intervals that aren't a whole number of ticks.
-- **`underDialog`** (on `DomRenderer`) is drawn over the sprites but under the
-  `dialog`.
+- **`underDialog`** (on either Renderer) is drawn over the sprites but under
+  the `dialog`.
+- **`skipChildren`** (on `Scene`) is for benchmarking only: neither Renderer
+  draws any sprite's `children`, so the two can be compared drawing the same
+  frames and nothing else. Don't ship a game with it on.
+
+## Choosing a Renderer
+
+A scene doesn't know which Renderer draws it: a game picks one by which it
+puts on the page, with the same props, and can switch back just as easily.
+
+```tsx
+export const Game = () => <CanvasRenderer scene={scene} pixelated />
+```
+
+- **`DomRenderer`** draws each sprite as page elements, so anything CSS can
+  do works, `children` and `class` included. It's the safe choice, and the
+  one to keep for a sprite drawn mostly with `children`.
+- **`CanvasRenderer`** paints them all onto one `<canvas>`, which is cheaper
+  with a lot of sprites, and only repaints when something has changed: a
+  still scene doesn't repaint at all. It draws a sprite's frames and the
+  parts of its `style` a canvas can reproduce. For anything else there's a
+  Draw Hook, and whatever's left out is reported as a Canvas Issue.
+
+### What the Canvas Renderer draws from `style`
+
+- `opacity`, multiplied through carriers, as nested elements fade together.
+- `visibility` (inherited by attached controllers unless they say `visible`)
+  and `display: none` (which hides everything a controller carries).
+- `z-index`, among sprites and among a carrier's attached controllers.
+- `transform` (the `translate`, `scale`, `rotate` and `skew` functions),
+  `translate` and `transform-origin`, in px, % and, for the origin, keywords.
+- `filter` with `hue-rotate`, `brightness`, `sepia` and `saturate`, and one
+  `drop-shadow`. On WebKit, which has no canvas `filter`, each image is
+  recoloured instead.
+
+Anything else in `style`, a value it can't read (such as `var(--o)` or
+`1em`), `class`, `inner.style` and `children` are Canvas Issues.
+
+### The Draw Hook
+
+A controller's `draw` option paints its sprite under the Canvas Renderer, in
+place of its current frame, for clip paths, gradients, text and shapes it
+can't get from style. The DOM Renderer never calls it, so a controller can
+keep its `children` for the DOM and use `draw` for canvas.
+
+```tsx
+const badge = createController({
+	frames: [badgeImage],
+	init: () => ({ /* ... */ }),
+	draw: ({ ctx, drawDefault, $ }) => {
+		ctx.beginPath()
+		ctx.arc($.width() / 2, $.height() / 2, $.width() / 2, 0, Math.PI * 2)
+		ctx.clip()
+		drawDefault()
+	},
+})
+```
+
+- `ctx` is already in the sprite's own box, so it draws from (0, 0) to
+  (width, height), with the sprite's alpha, filter and shadow set.
+- `drawDefault()` paints the current frame there, so the hook can draw over
+  or under it. `$`, `$scene` and `$currentFrame` are there too.
+- Whatever it sets on `ctx` is undone after it, and attached controllers
+  are still painted after it.
+- On WebKit the colour filters only recolour what `drawDefault()` paints, not
+  what the hook draws itself.
+
+### Canvas Issues
+
+Whatever a controller asks for that the Canvas Renderer can't draw is a
+Canvas Issue. Each is reported once per controller type and feature, the
+first time it's drawn, with `console.error`, giving an example id, where the
+controller was created and how to fix it:
+
+```
+[scoopjs:canvas] unsupported style.clip-path on type "branch" (id "branch-12")
+  created at src/draw/sprites.tsx:27
+  fix: clip with ctx.clip() in a Draw Hook
+```
+
+`scene.canvasIssues()` gives the same as plain records (`CanvasIssue`), so a
+game, or an agent porting one, can read the whole list in one call. It's
+empty under the DOM Renderer. Issues are only found by drawing, so finding
+them all means playing through every level.
 
 ## Building with Vite
 

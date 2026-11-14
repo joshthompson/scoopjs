@@ -1,24 +1,34 @@
 /**
  * The style translator: what the Canvas Renderer makes of a Controller's
  * `style`. `translateStyle` reads one Controller's own style, including what
- * it can't draw, for Canvas Issues. `canvasStyle` is how a Controller is
- * painted, with what it inherits from its carriers.
+ * it can't draw, for Canvas Issues. `effectiveStyle` is how a Controller is
+ * drawn, with what it inherits from its carriers: what the Canvas Renderer
+ * paints with, and the Pointer Pick goes by under either Renderer.
  */
 import type { JSX } from 'solid-js'
-import type { Controller } from './Controller'
-import { angle, unsupportedTransforms } from './geometry'
+import type { AnyController } from './Controller'
+import { absent, angle, length } from './cssValues'
+import { unreadablePlacement, unsupportedTransforms } from './geometry'
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
+/** The `filter` functions that recolour, which a canvas draws. */
+const colourFilterNames = [
+	'hue-rotate',
+	'brightness',
+	'sepia',
+	'saturate',
+] as const
 
 /**
  * One of the `filter` functions that recolour: `hue-rotate` in degrees, the
  * others as a number, 1 being 100%.
  */
 export interface ColourFilter {
-	name: 'hue-rotate' | 'brightness' | 'sepia' | 'saturate'
+	name: (typeof colourFilterNames)[number]
 	amount: number
 }
+
+const isColourFilter = (name: string): name is ColourFilter['name'] =>
+	(colourFilterNames as readonly string[]).includes(name)
 
 /** A `drop-shadow`, its offsets and blur in the Sprite's own pixels. */
 export interface Shadow {
@@ -63,6 +73,12 @@ export interface TranslatedStyle {
 	 * can't read.
 	 */
 	unsupportedTransforms: string[]
+	/**
+	 * The keys a canvas draws whose values it can't read, such as
+	 * `opacity: var(--o)`, which are Canvas Issues: they're drawn as if they
+	 * weren't there.
+	 */
+	unreadable: string[]
 }
 
 /** The keys a canvas draws. Every other is a Canvas Issue. */
@@ -77,10 +93,6 @@ const translatedKeys = new Set([
 	'transform-origin',
 	'filter',
 ])
-
-/** A value that's been left out, as Solid leaves it off the page. */
-const absent = (value: unknown) =>
-	value === undefined || value === null || value === ''
 
 /** A CSS number or percentage, or undefined for anything else. */
 function amount(value: unknown) {
@@ -122,13 +134,14 @@ function filterFunctions(value: string) {
 	return { functions, unreadable }
 }
 
-const colourFilters = new Set(['hue-rotate', 'brightness', 'sepia', 'saturate'])
-
 /**
  * A colour function as CSS reads it, or undefined for an amount it doesn't
  * allow. No amount is 0deg for `hue-rotate` and 100% for the rest.
  */
-function colourFilter(name: string, args: string): ColourFilter | undefined {
+function colourFilter(
+	name: ColourFilter['name'],
+	args: string,
+): ColourFilter | undefined {
 	if (name === 'hue-rotate') {
 		const degrees = args === '' ? 0 : angle(args)
 		return degrees === undefined ? undefined : { name, amount: degrees }
@@ -136,19 +149,10 @@ function colourFilter(name: string, args: string): ColourFilter | undefined {
 	const value = args === '' ? 1 : amount(args)
 	if (value === undefined || value < 0) return undefined
 	return {
-		name: name as ColourFilter['name'],
+		name,
 		// More than 100% sepia is 100%, as CSS has it
 		amount: name === 'sepia' ? Math.min(value, 1) : value,
 	}
-}
-
-/** A length in pixels: only a bare 0 goes without `px`. */
-function pixels(value: string) {
-	if (value.endsWith('px')) {
-		const number = Number(value.slice(0, -2))
-		return Number.isNaN(number) ? undefined : number
-	}
-	return Number(value) === 0 ? 0 : undefined
 }
 
 /**
@@ -161,9 +165,10 @@ function shadow(args: string): Shadow | undefined {
 	const lengths: number[] = []
 	const colours: string[] = []
 	for (const part of parts) {
-		const length = pixels(part)
-		if (length === undefined) colours.push(part)
-		else lengths.push(length)
+		// In pixels only: a percentage of nothing
+		const pixels = length(part)
+		if (pixels === undefined) colours.push(part)
+		else lengths.push(pixels)
 	}
 	if (lengths.length < 2 || lengths.length > 3 || colours.length > 1) {
 		return undefined
@@ -196,7 +201,7 @@ function translateFilter(value: unknown) {
 			else unsupportedFilters.push(name)
 			continue
 		}
-		const colour = colourFilters.has(name) && colourFilter(name, args)
+		const colour = isColourFilter(name) && colourFilter(name, args)
 		if (colour) colours.push(colour)
 		else unsupportedFilters.push(name)
 	}
@@ -210,6 +215,15 @@ function translateFilter(value: unknown) {
  */
 export function zIndex(style: JSX.CSSProperties | undefined) {
 	return Number.parseInt(String(style?.['z-index']), 10) || 0
+}
+
+/** Whether a `z-index` is one a page reads: a whole number, `auto` or none. */
+function readableZIndex(value: unknown) {
+	return (
+		absent(value) ||
+		(typeof value === 'number' && Number.isInteger(value)) ||
+		/^\s*([+-]?\d+|auto)\s*$/.test(String(value))
+	)
 }
 
 /**
@@ -232,14 +246,23 @@ export function translateStyle(
 		zIndex: zIndex(style),
 		...translateFilter(css.filter),
 		unsupportedTransforms: unsupportedTransforms(css.transform),
+		unreadable: [
+			...(opacity === undefined ? ['opacity'] : []),
+			...(readableZIndex(css['z-index']) ? [] : ['z-index']),
+			...unreadablePlacement(css),
+		],
 		untranslatable: Object.keys(css).filter(
 			(key) => !translatedKeys.has(key) && !absent(css[key]),
 		),
 	}
 }
 
-/** What a canvas paints a Controller with, carriers and all. */
-export interface CanvasStyle {
+/**
+ * The style a Controller is drawn with, carriers and all, whichever Renderer
+ * draws it: the Canvas Renderer paints with it, and the Pointer Pick leaves
+ * out what it hides.
+ */
+export interface EffectiveStyle {
 	/**
 	 * Its opacity times every carrier's, as a page's nested elements fade
 	 * together.
@@ -265,14 +288,18 @@ export interface CanvasStyle {
  * How a Controller is painted: its own style with what it inherits from
  * every Controller carrying it, as the DOM Renderer nests it inside them.
  */
-export function canvasStyle(controller: AnyController): CanvasStyle {
+export function effectiveStyle(controller: AnyController): EffectiveStyle {
 	let alpha = 1
 	let visible: boolean | undefined
 	let removed = false
 	const colours: ColourFilter[] = []
 	let shadow: Shadow | undefined
-	for (let c: AnyController | undefined = controller; c; c = c.carrier()) {
-		const own = translateStyle(c.sprite().style)
+	for (
+		let level: AnyController | undefined = controller;
+		level;
+		level = level.carrier()
+	) {
+		const own = translateStyle(level.sprite().style)
 		alpha *= own.alpha
 		// The nearest that says, itself first
 		visible ??= own.visible
