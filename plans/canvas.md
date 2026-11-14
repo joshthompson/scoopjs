@@ -65,7 +65,7 @@ It lives in Core and is exported next to `DomRenderer`.
 
 - A full repaint on `requestAnimationFrame`, only if something changed since the last one: a Tick, a Ticker, the camera, a resize, or an image finishing loading. Drawing only the areas that changed waits until the benchmark asks for it.
 - Sprites whose drawn box is outside the view are skipped.
-- The `<canvas>` backing store is the Renderer's size times `devicePixelRatio`. CSS transforms on the element, like run-game's zoom, keep working.
+- The `<canvas>` backing store is its size on the screen times `devicePixelRatio`: the Renderer's size times the scale of any CSS transforms on it or around it. CSS transforms on the element, like run-game's zoom, keep working, and stay sharp.
 - A `pixelated` prop turns image smoothing off for the whole Renderer. A Sprite's `image-rendering` turns it off for that Sprite and the parts it carries (see [Style](#style)).
 
 ### Draw order

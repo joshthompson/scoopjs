@@ -6,7 +6,11 @@ import {
 	createController,
 } from '../src/Controller'
 import { Scene, type SceneOptions } from '../src/Scene'
-import { createCanvasPainter } from '../src/canvasPainter'
+import {
+	createCanvasPainter,
+	maxBackingArea,
+	settleMs,
+} from '../src/canvasPainter'
 import type { Matrix } from '../src/geometry'
 import {
 	type RecordingContext,
@@ -759,6 +763,305 @@ describe('the Canvas Renderer paints', () => {
 		})
 	})
 
+	describe('at its size on the screen, whatever CSS scales it to', () => {
+		/**
+		 * Shows `canvas` at `scale` times its CSS size, as a transform on it or
+		 * on something it's in would: jsdom lays nothing out, so it'd be 0×0.
+		 * Gives back a way to change the scale.
+		 */
+		function scaledBy(canvas: HTMLCanvasElement, scale: number) {
+			let now = scale
+			vi.spyOn(canvas, 'getBoundingClientRect').mockImplementation(() => {
+				const width = Number.parseFloat(canvas.style.width) * now
+				const height = Number.parseFloat(canvas.style.height) * now
+				return {
+					...{ x: 0, y: 0, top: 0, left: 0, right: width, bottom: height },
+					...{ width, height, toJSON: () => ({}) },
+				}
+			})
+			return (next: number) => {
+				now = next
+			}
+		}
+
+		/** Every size the backing store's been given, as `width×height`. */
+		function backingSizes(canvas: HTMLCanvasElement) {
+			const sizes: string[] = []
+			const setWidth = vi.spyOn(canvas, 'width', 'set')
+			return {
+				sizes,
+				/** Notes the size, if the width was set since it last did. */
+				note() {
+					if (setWidth.mock.calls.length > sizes.length) {
+						sizes.push(`${canvas.width}×${canvas.height}`)
+					}
+				},
+			}
+		}
+
+		/** The window resizing, which repaints the Scene. */
+		const resizeWindow = () => window.dispatchEvent(new Event('resize'))
+
+		it('with a backing store that size times devicePixelRatio, in which it paints in its own pixels', () => {
+			vi.stubGlobal('devicePixelRatio', 2)
+			loadAll('a')
+			const { canvas, ctx } = paint([sprite('a', { x: 10, y: 20 })], {
+				width: 100,
+				height: 50,
+				x: 5,
+			})
+			scaledBy(canvas, 1.5)
+			frames.run()
+			expect([canvas.width, canvas.height]).toEqual([300, 150])
+			// The page still lays it out at the Renderer's size
+			expect([canvas.style.width, canvas.style.height]).toEqual([
+				'100px',
+				'50px',
+			])
+			expect(rounded(ctx.draws[0].state.transform)).toEqual({
+				a: 3,
+				b: 0,
+				c: 0,
+				d: 3,
+				e: 15,
+				f: 60,
+			})
+		})
+
+		it("as run-game's stage is, scaled to fit the window", () => {
+			loadAll('a')
+			const { canvas } = paint([sprite('a')], { width: 960, height: 540 })
+			scaledBy(canvas, 1267 / 960)
+			frames.run()
+			expect([canvas.width, canvas.height]).toEqual([1267, 713])
+		})
+
+		it("with a Draw Hook's context in the Sprite's box, in the Renderer's pixels", () => {
+			const transforms: Matrix[] = []
+			const hooked = createController<ControllerBaseType>({
+				frames: ['hook.png'],
+				draw: ({ ctx: hookCtx }) => {
+					transforms.push(
+						(hookCtx as unknown as RecordingContext).state.transform,
+					)
+				},
+				init: () => ({
+					...{ id: 'hook', type: 'hook', x: () => 10, y: () => 4 },
+					...{ width: () => 20, height: () => 10 },
+				}),
+			})
+			const { canvas } = paint([hooked])
+			scaledBy(canvas, 2)
+			frames.run()
+			expect(transforms.map(rounded)).toEqual([
+				{ a: 2, b: 0, c: 0, d: 2, e: 20, f: 8 },
+			])
+		})
+
+		it('resized at once when that size moves by more than a fifth', () => {
+			loadAll('a')
+			const { canvas, ctx } = paint([sprite('a')])
+			const scale = scaledBy(canvas, 1)
+			frames.run()
+			expect(canvas.width).toBe(100)
+			ctx.reset()
+			scale(1.25)
+			resizeWindow()
+			frames.run()
+			expect([canvas.width, canvas.height]).toEqual([125, 125])
+			expect(ctx.draws[0].state.transform.a).toBe(1.25)
+		})
+
+		it('resized for a smaller move once it has stayed put for a moment', () => {
+			loadAll('a')
+			const { canvas } = paint([sprite('a')])
+			const scale = scaledBy(canvas, 1)
+			frames.run()
+			scale(1.1)
+			resizeWindow()
+			frames.run()
+			expect(canvas.width).toBe(100)
+			vi.advanceTimersByTime(settleMs - 1)
+			frames.run()
+			expect(canvas.width).toBe(100)
+			// Then painted again, though nothing in the Scene has moved
+			vi.advanceTimersByTime(1)
+			expect(frames.pending()).toBe(1)
+			frames.run()
+			expect(canvas.width).toBe(110)
+		})
+
+		it('not resized every display frame of a zoom animated with scale()', () => {
+			loadAll('a')
+			const { canvas } = paint([sprite('a')], { width: 960, height: 540 })
+			const scale = scaledBy(canvas, 1)
+			const backing = backingSizes(canvas)
+			frames.run()
+			backing.note()
+			// From 1× to 3× and back to 2×, over two seconds of display frames
+			const zoom = [
+				...Array.from({ length: 60 }, (_, i) => 1 + (2 * (i + 1)) / 60),
+				...Array.from({ length: 60 }, (_, i) => 3 - (i + 1) / 60),
+			]
+			for (const step of zoom) {
+				scale(step)
+				resizeWindow()
+				vi.advanceTimersByTime(16)
+				frames.run()
+				backing.note()
+			}
+			// Once to start with, then once for each fifth it grew or shrank by,
+			// rather than every display frame
+			expect(backing.sizes.length).toBeLessThanOrEqual(1 + 6 + 3)
+			// Then to exactly its size on the screen, once it's stayed put
+			vi.advanceTimersByTime(settleMs)
+			frames.run()
+			backing.note()
+			expect(backing.sizes.at(-1)).toBe('1920×1080')
+			expect(backing.sizes.length).toBeLessThanOrEqual(1 + 6 + 3 + 1)
+		})
+
+		it("resized exactly, at once, when the screen's density changes", () => {
+			loadAll('a')
+			const { canvas } = paint([sprite('a')])
+			scaledBy(canvas, 1)
+			frames.run()
+			vi.stubGlobal('devicePixelRatio', 1.1)
+			resizeWindow()
+			frames.run()
+			expect(canvas.width).toBe(110)
+		})
+
+		it('at a lower density where it would be bigger than a phone can make a canvas', () => {
+			vi.stubGlobal('devicePixelRatio', 3)
+			loadAll('a')
+			const { canvas, ctx } = paint([sprite('a')], {
+				width: 960,
+				height: 540,
+			})
+			scaledBy(canvas, 4)
+			frames.run()
+			// Not 11,520×6,480, which is 74.6 million pixels
+			expect(canvas.width * canvas.height).toBeLessThanOrEqual(maxBackingArea)
+			expect([canvas.width, canvas.height]).toEqual([5333, 3000])
+			expect(ctx.draws[0].state.transform.a).toBeCloseTo(5333 / 960, 2)
+		})
+
+		it("at less than one pixel to one of the Renderer's, if it must", () => {
+			loadAll('a')
+			const { canvas } = paint([sprite('a')], { width: 8000, height: 4000 })
+			scaledBy(canvas, 1)
+			frames.run()
+			expect(canvas.width * canvas.height).toBeLessThanOrEqual(maxBackingArea)
+			expect([canvas.width, canvas.height]).toEqual([5657, 2828])
+		})
+
+		it('with drop-shadows as big as on the page', () => {
+			loadAll('glow')
+			const { canvas, ctx } = paint([
+				sprite('glow', {
+					style: { filter: 'drop-shadow(2px 3px 4px black)' },
+				}),
+			])
+			scaledBy(canvas, 2)
+			frames.run()
+			const { shadowOffsetX, shadowOffsetY, shadowBlur } = ctx.draws[0].state
+			// The blur twice its length, as a canvas blurs by half shadowBlur
+			expect([shadowOffsetX, shadowOffsetY, shadowBlur]).toEqual([4, 6, 16])
+		})
+
+		describe('with pixel art on whole pixels of the screen', () => {
+			/** Where each image was painted from, in the backing store's pixels. */
+			const origins = (ctx: RecordingContext) =>
+				ctx.draws.map(({ image, state: { transform } }) => ({
+					image,
+					x: Math.round(transform.e * 1000) / 1000,
+					y: Math.round(transform.f * 1000) / 1000,
+				}))
+
+			it('under a pixelated Renderer, or for a pixelated Sprite', () => {
+				loadAll('a', 'b')
+				const pixelated = paint([sprite('a', { x: 10.3, y: 7 })], {
+					pixelated: true,
+				})
+				const pixelatedSprite = paint([
+					sprite('b', {
+						x: 10.3,
+						y: 7,
+						style: { 'image-rendering': 'pixelated' },
+					}),
+				])
+				scaledBy(pixelated.canvas, 1.32)
+				scaledBy(pixelatedSprite.canvas, 1.32)
+				frames.run()
+				// Rather than from (13.596, 9.24)
+				expect(origins(pixelated.ctx)).toEqual([
+					{ image: 'a.png', x: 14, y: 9 },
+				])
+				expect(origins(pixelatedSprite.ctx)).toEqual([
+					{ image: 'b.png', x: 14, y: 9 },
+				])
+			})
+
+			it('but not when smoothed, nor when turned', () => {
+				loadAll('a', 'b')
+				const smooth = paint([sprite('a', { x: 10.3, y: 7 })])
+				const turned = paint([sprite('b', { x: 10.3, y: 7, rotation: 45 })], {
+					pixelated: true,
+				})
+				scaledBy(smooth.canvas, 1.32)
+				scaledBy(turned.canvas, 1.32)
+				frames.run()
+				expect(origins(smooth.ctx)).toEqual([
+					{ image: 'a.png', x: 13.596, y: 9.24 },
+				])
+				const [{ x, y }] = origins(turned.ctx)
+				expect([x, y]).not.toEqual([Math.round(x), Math.round(y)])
+			})
+		})
+
+		describe('measured again, though nothing in the Scene has moved', () => {
+			/** A canvas on the page, in a Renderer's `<div>`, painted once. */
+			function onPage() {
+				loadAll('a')
+				const painting = paint([sprite('a')])
+				const renderer = document.createElement('div')
+				const page = document.createElement('main')
+				renderer.append(painting.canvas)
+				page.append(renderer)
+				document.body.append(page)
+				cleanup.push(() => page.remove())
+				const scale = scaledBy(painting.canvas, 1)
+				frames.run()
+				return { ...painting, renderer, page, scale }
+			}
+
+			it('when a transform on something the canvas is in changes', async () => {
+				const { canvas, page, scale } = onPage()
+				scale(2)
+				page.style.transform = 'scale(2)'
+				// A MutationObserver says so once the change has been made
+				await Promise.resolve()
+				expect(frames.pending()).toBe(1)
+				frames.run()
+				expect(canvas.width).toBe(200)
+			})
+
+			it('when a CSS animation on something it is in finishes, but no other', () => {
+				const { renderer, page } = onPage()
+				const elsewhere = document.createElement('p')
+				page.append(elsewhere)
+				elsewhere.dispatchEvent(new Event('transitionend', { bubbles: true }))
+				expect(frames.pending()).toBe(0)
+				renderer.dispatchEvent(new Event('transitionend', { bubbles: true }))
+				expect(frames.pending()).toBe(1)
+				frames.run()
+				renderer.dispatchEvent(new Event('animationend', { bubbles: true }))
+				expect(frames.pending()).toBe(1)
+			})
+		})
+	})
+
 	describe('with the style a canvas can draw', () => {
 		/** The state each image was drawn with, by image. */
 		const stateOf = (
@@ -826,12 +1129,14 @@ describe('the Canvas Renderer paints', () => {
 			}
 			// A canvas's shadow is in the screen's own pixels, whatever the
 			// transform, so it's turned 90° and doubled for the density here.
+			// Its blur is doubled again, as a canvas blurs by half its
+			// shadowBlur, where drop-shadow blurs by all of its length.
 			expect(shadow('glow.png')).toEqual({
 				filter: 'none',
 				colour: 'rgba(0, 0, 0, 0.5)',
 				x: -6,
 				y: 4,
-				blur: 8,
+				blur: 16,
 			})
 			expect(shadow('outline.png')).toEqual({
 				filter: 'none',

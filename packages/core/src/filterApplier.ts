@@ -143,8 +143,10 @@ export function createFilterApplier(context: CanvasRenderingContext2D) {
 		/**
 		 * Sets everything a Controller's style says on the context, and resets
 		 * what it doesn't say, so nothing is left from the last Controller.
-		 * `m` is the Sprite's transform, and `density` the screen's pixels to
-		 * one of the Renderer's.
+		 * `m` is the Sprite's transform, and `density` the backing store's
+		 * pixels to one of the Renderer's, which takes in the screen's density
+		 * and however much CSS scales the canvas, so a shadow is as big as it
+		 * would be on the page whatever scales it.
 		 */
 		apply(style: EffectiveStyle, m: Matrix, density: number) {
 			context.globalAlpha = style.alpha
@@ -162,8 +164,12 @@ export function createFilterApplier(context: CanvasRenderingContext2D) {
 			context.shadowColor = shadow?.colour ?? 'rgba(0, 0, 0, 0)'
 			context.shadowOffsetX = density * (m.a * x + m.c * y)
 			context.shadowOffsetY = density * (m.b * x + m.d * y)
+			// Nor is its blur the same length. `drop-shadow`'s is the standard
+			// deviation of the blur, as an SVG feDropShadow's is, but a canvas
+			// blurs by half its `shadowBlur`, so it's given twice as much: the
+			// two then match pixel for pixel in Chrome.
 			context.shadowBlur =
-				density * blur * Math.sqrt(Math.abs(m.a * m.d - m.b * m.c))
+				2 * density * blur * Math.sqrt(Math.abs(m.a * m.d - m.b * m.c))
 		},
 
 		/**

@@ -219,7 +219,7 @@ Then the two Renderers are benchmarked against each other in run-game. The Canva
   ```
 - **`$ref`.** Under the Canvas Renderer, `onMount` still runs. Its `$ref` is a getter that returns `undefined` and records a Canvas Issue when read.
 - **Repainting.** A full repaint, at most once per display frame, only when something changed since the last one: a Tick, a Ticker, the camera, a resize or an image load. Sprites whose drawn box is outside the view are skipped.
-- **The backing store** is the Renderer's width and height times `devicePixelRatio`, and is resized with the Renderer.
+- **The backing store** is the canvas's size on the screen in the screen's own pixels: the Renderer's width and height, times the scale of every CSS transform on it or anything it's in (from `getBoundingClientRect`, measured as each repaint starts), times `devicePixelRatio`, and never more than 16 million pixels. It's resized at once with the Renderer, when the screen's density changes, or when its size on the screen moves by more than a fifth. After a smaller move, it's resized once that size has stayed put for 250 ms, so a zoom animated with `scale()` doesn't reallocate it every display frame. Under `pixelated`, a Sprite that isn't turned or skewed is painted from a whole pixel of the backing store.
 
 ### Build order
 
