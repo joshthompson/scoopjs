@@ -9,14 +9,25 @@ import type { AnyController } from './Controller'
 import { absent, angle, length } from './cssValues'
 import { unreadablePlacement, unsupportedTransforms } from './geometry'
 
+/** The `filter` functions that recolour, which a canvas draws. */
+const colourFilterNames = [
+	'hue-rotate',
+	'brightness',
+	'sepia',
+	'saturate',
+] as const
+
 /**
  * One of the `filter` functions that recolour: `hue-rotate` in degrees, the
  * others as a number, 1 being 100%.
  */
 export interface ColourFilter {
-	name: 'hue-rotate' | 'brightness' | 'sepia' | 'saturate'
+	name: (typeof colourFilterNames)[number]
 	amount: number
 }
+
+const isColourFilter = (name: string): name is ColourFilter['name'] =>
+	(colourFilterNames as readonly string[]).includes(name)
 
 /** A `drop-shadow`, its offsets and blur in the Sprite's own pixels. */
 export interface Shadow {
@@ -122,13 +133,14 @@ function filterFunctions(value: string) {
 	return { functions, unreadable }
 }
 
-const colourFilters = new Set(['hue-rotate', 'brightness', 'sepia', 'saturate'])
-
 /**
  * A colour function as CSS reads it, or undefined for an amount it doesn't
  * allow. No amount is 0deg for `hue-rotate` and 100% for the rest.
  */
-function colourFilter(name: string, args: string): ColourFilter | undefined {
+function colourFilter(
+	name: ColourFilter['name'],
+	args: string,
+): ColourFilter | undefined {
 	if (name === 'hue-rotate') {
 		const degrees = args === '' ? 0 : angle(args)
 		return degrees === undefined ? undefined : { name, amount: degrees }
@@ -136,7 +148,7 @@ function colourFilter(name: string, args: string): ColourFilter | undefined {
 	const value = args === '' ? 1 : amount(args)
 	if (value === undefined || value < 0) return undefined
 	return {
-		name: name as ColourFilter['name'],
+		name,
 		// More than 100% sepia is 100%, as CSS has it
 		amount: name === 'sepia' ? Math.min(value, 1) : value,
 	}
@@ -188,7 +200,7 @@ function translateFilter(value: unknown) {
 			else unsupportedFilters.push(name)
 			continue
 		}
-		const colour = colourFilters.has(name) && colourFilter(name, args)
+		const colour = isColourFilter(name) && colourFilter(name, args)
 		if (colour) colours.push(colour)
 		else unsupportedFilters.push(name)
 	}

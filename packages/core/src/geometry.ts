@@ -56,11 +56,36 @@ function apply(m: Matrix, x: number, y: number) {
 }
 
 /**
- * One function of a CSS `transform`, or nothing for one outside the
- * `translate`, `scale`, `rotate` and `skew` families.
+ * The `transform` functions a canvas draws: the `translate`, `scale`,
+ * `rotate` and `skew` families. Any other is a Canvas Issue.
+ */
+const translatedTransforms = [
+	'translate',
+	'translateX',
+	'translateY',
+	'scale',
+	'scaleX',
+	'scaleY',
+	'rotate',
+	'skew',
+	'skewX',
+	'skewY',
+] as const
+
+type TranslatedTransform = (typeof translatedTransforms)[number]
+
+/** Whether `name` is a `transform` function a canvas draws. */
+export const isTranslatedTransform = (
+	name: string,
+): name is TranslatedTransform =>
+	(translatedTransforms as readonly string[]).includes(name)
+
+/**
+ * One function of a CSS `transform`, or nothing for one whose arguments it
+ * can't read.
  */
 function transformFunction(
-	name: string,
+	name: TranslatedTransform,
 	args: string[],
 	width: number,
 	height: number,
@@ -128,7 +153,9 @@ function parseTransform(value: string, width: number, height: number) {
 			.split(/[\s,]+/)
 			.map((arg) => arg.trim())
 			.filter(Boolean)
-		const step = transformFunction(name, parts, width, height)
+		const step = isTranslatedTransform(name)
+			? transformFunction(name, parts, width, height)
+			: undefined
 		if (step) matrix = multiply(matrix, step)
 		else unsupported.push(name)
 	}

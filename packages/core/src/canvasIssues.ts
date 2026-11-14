@@ -7,6 +7,7 @@ import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import { childrenToDraw } from './children'
 import { absent } from './cssValues'
+import { isTranslatedTransform } from './geometry'
 import { translateStyle } from './styleTranslator'
 
 /** Something a Controller asks for that the Canvas Renderer can't draw. */
@@ -287,7 +288,7 @@ function transformFix(name: string) {
 	if (/^(rotate[XY]|translateZ|scaleZ|perspective)$|3d$/.test(name)) {
 		return 'a canvas is flat: leave it out, or fake it with scale or skew'
 	}
-	if (/^(translate|scale|skew)[XY]?$|^rotate$/.test(name)) {
+	if (isTranslatedTransform(name)) {
 		return 'give it arguments a canvas can read: lengths in px or %, angles with a unit'
 	}
 	return 'use translate, scale, rotate or skew, which are translated'
