@@ -218,4 +218,133 @@ describe('Canvas Issues', () => {
 			)
 		})
 	})
+
+	/** Each issue reported, as feature and fix. */
+	const reported = (scene: Scene) =>
+		scene.canvasIssues().map(({ feature, fix }) => ({ feature, fix }))
+
+	describe('for each feature', () => {
+		it('children', () => {
+			const scene = paint([sprite('a', { children: () => 'hello' })])
+			expect(reported(scene)).toEqual([
+				{ feature: 'children', fix: 'draw it in a Draw Hook' },
+			])
+		})
+
+		it("not children while the Scene's skipChildren bench switch is on", () => {
+			const scene = paint([sprite('a', { children: () => 'hello' })], {
+				skipChildren: true,
+			})
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('inner.style', () => {
+			const scene = paint([
+				sprite('a', { innerStyle: { 'background-size': 'contain' } }),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'inner.style',
+			])
+		})
+
+		it('not inner.style with nothing in it', () => {
+			const scene = paint([sprite('a', { innerStyle: { filter: undefined } })])
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('each untranslatable style key, but none a canvas draws', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						opacity: 0.5,
+						'z-index': 2,
+						transform: 'scale(2)',
+						filter: 'sepia(1)',
+						transition: 'opacity 1s',
+						'border-radius': '50%',
+						'--glow': 'red',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{
+					feature: 'style.transition',
+					fix: 'tween the value over Ticks in onEnterFrame instead',
+				},
+				{
+					feature: 'style.border-radius',
+					fix: 'clip to a rounded rectangle in a Draw Hook',
+				},
+				{
+					feature: 'style.--glow',
+					fix: 'custom properties only reach children and classes: draw what reads it in a Draw Hook',
+				},
+			])
+		})
+
+		it('each filter function outside the supported set', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						filter: 'sepia(1) blur(2px) opacity(50%) hue-rotate(90deg)',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{ feature: 'style.filter blur()', fix: 'draw it in a Draw Hook' },
+				{
+					feature: 'style.filter opacity()',
+					fix: 'use style.opacity, which is translated',
+				},
+			])
+		})
+
+		it('each transform function outside the supported set', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						transform: 'rotate(10deg) matrix(1, 0, 0, 1, 5, 5) rotateX(45deg)',
+					},
+				}),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'style.transform matrix()',
+				'style.transform rotateX()',
+			])
+		})
+	})
+
+	describe('not for a Controller with a Draw Hook', () => {
+		it('for its children or untranslatable style', () => {
+			const scene = paint([
+				sprite('a', {
+					children: () => 'hello',
+					style: {
+						'clip-path': 'circle()',
+						'border-radius': '50%',
+						filter: 'blur(2px)',
+					},
+					draw: ({ drawDefault }) => drawDefault(),
+				}),
+			])
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('but still for its class, inner.style and where it is', () => {
+			const scene = paint([
+				sprite('a', {
+					class: 'leafy',
+					innerStyle: { 'background-size': 'contain' },
+					// Its context is moved into a box without the matrix
+					style: { transform: 'matrix(1, 0, 0, 1, 5, 5)' },
+					draw: ({ drawDefault }) => drawDefault(),
+				}),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'class',
+				'inner.style',
+				'style.transform matrix()',
+			])
+		})
+	})
 })

@@ -5,6 +5,7 @@
  */
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
+import { childrenToDraw } from './children'
 import { translateStyle } from './styleTranslator'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
@@ -150,11 +151,65 @@ export function reportControllerIssues(
 	if (sprite.class) {
 		report('class', 'move what the class does into style or a Draw Hook')
 	}
+	const inner = (sprite.inner?.style ?? {}) as Record<string, unknown>
+	if (Object.values(inner).some((value) => !absent(value))) {
+		report(
+			'inner.style',
+			'move it into style, or paint the Frame your own way in a Draw Hook',
+		)
+	}
+	// A Draw Hook has taken over painting the Sprite, so what it looks like
+	// is up to the hook: only what's still to port is reported. The children
+	// can stay for the DOM Renderer.
+	const drawn = controller.draw !== undefined
+	if (!drawn && childrenToDraw(scene, sprite) !== undefined) {
+		report('children', drawHook)
+	}
 	const style = translateStyle(sprite.style)
-	for (const key of style.untranslatable) {
-		report(`style.${key}`, styleFix(key))
+	if (!drawn) {
+		for (const key of style.untranslatable) {
+			report(`style.${key}`, styleFix(key))
+		}
+		const filter = String(sprite.style?.filter)
+		for (const name of style.unsupportedFilters) {
+			// Something that isn't a function at all is named as it's written
+			const written = filter.includes(`${name}(`) ? `${name}()` : name
+			report(`style.filter ${written}`, filterFixes[name] ?? drawHook)
+		}
+	}
+	// Where the Sprite is drawn, which a Draw Hook's context is moved by
+	// already, so these are still reported with one.
+	for (const name of style.unsupportedTransforms) {
+		report(`style.transform ${name}()`, transformFix(name))
 	}
 }
+
+/** How to do without a `filter` function a canvas doesn't draw. */
+const filterFixes: Record<string, string> = {
+	opacity: 'use style.opacity, which is translated',
+	grayscale: 'use saturate(), which is translated: saturate(0) is grayscale(1)',
+	'drop-shadow':
+		'a canvas casts one drop-shadow, its lengths in px: keep one, or draw the rest in a Draw Hook',
+}
+
+/** How to do without a `transform` function a canvas doesn't draw. */
+function transformFix(name: string) {
+	if (name === 'matrix') {
+		return 'write it as translate, scale, rotate and skew, which are translated'
+	}
+	if (name === 'rotateZ') return 'use rotate(), which is the same on a canvas'
+	if (/^(rotate[XY]|translateZ|scaleZ|perspective)$|3d$/.test(name)) {
+		return 'a canvas is flat: leave it out, or fake it with scale or skew'
+	}
+	if (/^(translate|scale|skew)[XY]?$|^rotate$/.test(name)) {
+		return 'give it arguments a canvas can read: lengths in px or %, angles with a unit'
+	}
+	return 'use translate, scale, rotate or skew, which are translated'
+}
+
+/** A value that's been left out, as Solid leaves it off the page. */
+const absent = (value: unknown) =>
+	value === undefined || value === null || value === ''
 
 /** Draws it in a Draw Hook: the fix for most of what a canvas can't. */
 const drawHook = 'draw it in a Draw Hook'
