@@ -210,6 +210,43 @@ function parseOrigin(
 }
 
 /**
+ * The separate `translate` property, as CSS reads it: `none`, or an x and
+ * maybe a y, each a length or a percentage. A z is left out, since a canvas
+ * is flat. Anything else is undefined.
+ */
+function parseTranslate(
+	value: string,
+	width: number,
+	height: number,
+): Vector | undefined {
+	if (value.trim() === 'none') return { x: 0, y: 0 }
+	const [first, second = '0'] = value.trim().split(/\s+/)
+	const x = length(first, width)
+	const y = length(second, height)
+	return x === undefined || y === undefined ? undefined : { x, y }
+}
+
+/** A value that's been left out, as Solid leaves it off the page. */
+const absent = (value: unknown) =>
+	value === undefined || value === null || value === ''
+
+/**
+ * The keys of a style that place its Sprite, `translate` and
+ * `transform-origin`, whose values can't be read, which are Canvas Issues.
+ */
+export function unreadablePlacement(
+	style: Record<string, unknown>,
+): ('translate' | 'transform-origin')[] {
+	const readers = { translate: parseTranslate, 'transform-origin': parseOrigin }
+	return (['translate', 'transform-origin'] as const).filter((key) => {
+		const value = style[key]
+		if (absent(value)) return false
+		// Its size makes no difference to whether it can be read
+		return typeof value !== 'string' || !readers[key](value, 1, 1)
+	})
+}
+
+/**
  * How far parallax leaves a Controller from where its x and y say. With no
  * parallax (1) it moves with the scene. With less, the camera moves it less
  * than the rest, so against the scene it drifts along with the camera, by
@@ -250,16 +287,14 @@ export function spriteTransform(controller: AnyController): Matrix {
 			: scaling(sprite.xScale ?? 1, sprite.yScale ?? 1)
 	// The separate `translate` property moves it on the screen, outside its
 	// rotation, as CSS has it.
-	const [moveX = '0', moveY = '0'] =
-		typeof style.translate === 'string'
-			? style.translate.trim().split(/\s+/)
-			: []
+	const move = (typeof style.translate === 'string' &&
+		parseTranslate(style.translate, width, height)) || { x: 0, y: 0 }
 	const shift = carrier
 		? { x: 0, y: 0 }
 		: parallaxOffset(controller, sprite.parallax ?? 1)
 	const local = [
 		translation(sprite.x + shift.x, sprite.y + shift.y),
-		translation(length(moveX, width) ?? 0, length(moveY, height) ?? 0),
+		translation(move.x, move.y),
 		translation(origin.x, origin.y),
 		rotation(sprite.rotation ?? 0),
 		transform,

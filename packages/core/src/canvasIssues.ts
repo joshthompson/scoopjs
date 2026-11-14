@@ -242,8 +242,12 @@ export function reportControllerIssues(
 			report(`style.filter ${written}`, filterFixes[name] ?? drawHook)
 		}
 	}
-	// Where the Sprite is drawn, which a Draw Hook's context is moved by
-	// already, so these are still reported with one.
+	// Where the Sprite is drawn, and its alpha, which a Draw Hook's context
+	// is set to already, so these are still reported with one.
+	for (const key of style.unreadable) {
+		const value = (sprite.style as Record<string, unknown>)[key]
+		report(`style.${key} ${String(value)}`, unreadableFixes[key])
+	}
 	for (const name of style.unsupportedTransforms) {
 		report(`style.transform ${name}()`, transformFix(name))
 	}
@@ -255,6 +259,15 @@ const filterFixes: Record<string, string> = {
 	grayscale: 'use saturate(), which is translated: saturate(0) is grayscale(1)',
 	'drop-shadow':
 		'a canvas casts one drop-shadow, its lengths in px: keep one, or draw the rest in a Draw Hook',
+}
+
+/** How to write a translated `style` key's value so a canvas can read it. */
+const unreadableFixes: Record<string, string> = {
+	opacity: 'give it a number or a percentage, which a canvas can read',
+	'z-index': 'give it a whole number, which a canvas can read',
+	translate: 'give it lengths in px or %, which a canvas can read',
+	'transform-origin':
+		'give it lengths in px or % or keywords such as left and top, which a canvas can read',
 }
 
 /** How to do without a `transform` function a canvas doesn't draw. */

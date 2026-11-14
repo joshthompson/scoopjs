@@ -6,7 +6,7 @@
  */
 import type { JSX } from 'solid-js'
 import type { Controller } from './Controller'
-import { angle, unsupportedTransforms } from './geometry'
+import { angle, unreadablePlacement, unsupportedTransforms } from './geometry'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 type AnyController = Controller<any>
@@ -63,6 +63,12 @@ export interface TranslatedStyle {
 	 * can't read.
 	 */
 	unsupportedTransforms: string[]
+	/**
+	 * The keys a canvas draws whose values it can't read, such as
+	 * `opacity: var(--o)`, which are Canvas Issues: they're drawn as if they
+	 * weren't there.
+	 */
+	unreadable: string[]
 }
 
 /** The keys a canvas draws. Every other is a Canvas Issue. */
@@ -212,6 +218,15 @@ export function zIndex(style: JSX.CSSProperties | undefined) {
 	return Number.parseInt(String(style?.['z-index']), 10) || 0
 }
 
+/** Whether a `z-index` is one a page reads: a whole number, `auto` or none. */
+function readableZIndex(value: unknown) {
+	return (
+		absent(value) ||
+		(typeof value === 'number' && Number.isInteger(value)) ||
+		/^\s*([+-]?\d+|auto)\s*$/.test(String(value))
+	)
+}
+
 /**
  * A Controller's own `style`, translated into what a canvas can do with it.
  * It reads only the keys it knows, so it never parses anything else.
@@ -232,6 +247,11 @@ export function translateStyle(
 		zIndex: zIndex(style),
 		...translateFilter(css.filter),
 		unsupportedTransforms: unsupportedTransforms(css.transform),
+		unreadable: [
+			...(opacity === undefined ? ['opacity'] : []),
+			...(readableZIndex(css['z-index']) ? [] : ['z-index']),
+			...unreadablePlacement(css),
+		],
 		untranslatable: Object.keys(css).filter(
 			(key) => !translatedKeys.has(key) && !absent(css[key]),
 		),

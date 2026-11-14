@@ -312,6 +312,60 @@ describe('Canvas Issues', () => {
 				'style.transform rotateX()',
 			])
 		})
+
+		it('each translated style key whose value it cannot read, with the value', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						translate: '1em 2em',
+						opacity: 'var(--o)',
+						'transform-origin': 'calc(10px)',
+						'z-index': 'var(--z)',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{
+					feature: 'style.opacity var(--o)',
+					fix: 'give it a number or a percentage, which a canvas can read',
+				},
+				{
+					feature: 'style.z-index var(--z)',
+					fix: 'give it a whole number, which a canvas can read',
+				},
+				{
+					feature: 'style.translate 1em 2em',
+					fix: 'give it lengths in px or %, which a canvas can read',
+				},
+				{
+					feature: 'style.transform-origin calc(10px)',
+					fix: 'give it lengths in px or % or keywords such as left and top, which a canvas can read',
+				},
+			])
+		})
+
+		it('none for translated style keys it can read', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						translate: 'none',
+						opacity: '50%',
+						'transform-origin': 'right 20%',
+						'z-index': 'auto',
+						visibility: 'visible',
+					},
+				}),
+				sprite('b', {
+					style: {
+						translate: '-5px',
+						opacity: 1,
+						'transform-origin': '0 0',
+						'z-index': 3,
+					},
+				}),
+			])
+			expect(scene.canvasIssues()).toEqual([])
+		})
 	})
 
 	describe('not for a Controller with a Draw Hook', () => {

@@ -31,9 +31,7 @@ type AnyController = Controller<any>
  * a runner is the runner's part too. Each straight after what carries it.
  */
 function partsOf(carrier: AnyController): AnyController[] {
-	return carrier
-		.childControllers()
-		.flatMap((part) => [part, ...partsOf(part)])
+	return carrier.childControllers().flatMap((part) => [part, ...partsOf(part)])
 }
 
 export interface SceneOptions {
