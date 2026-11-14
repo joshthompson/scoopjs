@@ -93,6 +93,9 @@ export function createFrameStepper(source: FrameSource): {
 			taken = frame
 			setStepped(frame)
 		}
+		// No `frame` now: the one last taken is let go of, so setting it again
+		// jumps there again, as the DOM Sprite did whenever `frame` changed
+		else if (typeof source.frame() !== 'number') taken = undefined
 		const animating =
 			!frameStep.paused && source.playing() && source.frameCount() > 0
 

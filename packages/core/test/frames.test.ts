@@ -127,6 +127,25 @@ describe('frame stepping', () => {
 		s.destroy()
 	})
 
+	it('jumps to a controlled frame again after it was let go of', async () => {
+		// As a runner does: stood on Frame 0, then running with no `frame`,
+		// then set to Frame 0 again, standing on skis
+		const [frame, setFrame] = createSignal<number | undefined>(0)
+		const a = animated('a', { frame, frameInterval: 10 })
+		const s = await scene([a])
+		vi.advanceTimersByTime(10)
+		expect(a.currentFrame()).toBe(0)
+		setFrame(undefined)
+		vi.advanceTimersByTime(20)
+		expect(a.currentFrame()).toBe(2)
+		a.setState('pause')
+		setFrame(0)
+		expect(a.currentFrame()).toBe(0)
+		vi.advanceTimersByTime(20)
+		expect(a.currentFrame()).toBe(0)
+		s.destroy()
+	})
+
 	it('plays on from a controlled frame set during a Tick', async () => {
 		const [frame, setFrame] = createSignal<number>()
 		const seen: number[] = []
