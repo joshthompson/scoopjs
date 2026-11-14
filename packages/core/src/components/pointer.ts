@@ -16,12 +16,20 @@ export interface PointerProps {
  */
 export function pointerHandlers(props: PointerProps) {
 	const position = (event: MouseEvent | TouchEvent) => {
-		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+		const element = event.currentTarget as HTMLElement
+		const rect = element.getBoundingClientRect()
+		// A game can scale the Renderer with CSS, as run-game does to fit the
+		// window: the pointer's on the screen, where the scene's pixels are
+		// bigger or smaller, by however much it's been scaled. The element's
+		// own size, before any transform, is the scene's.
+		const scaleX = element.offsetWidth ? rect.width / element.offsetWidth : 1
+		const scaleY = element.offsetHeight ? rect.height / element.offsetHeight : 1
 		const camera = props.scene.canvas.get()
-		const pointer = event instanceof MouseEvent ? event : event.touches[0]
+		const pointer =
+			'touches' in event ? (event.touches[0] ?? event.changedTouches[0]) : event
 		return {
-			x: pointer.clientX - rect.left + camera.x(),
-			y: pointer.clientY - rect.top + camera.y(),
+			x: (pointer.clientX - rect.left) / scaleX + camera.x(),
+			y: (pointer.clientY - rect.top) / scaleY + camera.y(),
 		}
 	}
 	return {
