@@ -14,6 +14,7 @@ import {
 import type { Controller } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
+import { childrenToDraw } from '../children'
 import { createFrameStepper } from '../frames'
 import type { Vector } from '../types'
 
@@ -169,7 +170,8 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 
 	// The same children from one move to the next, so they're only drawn again
 	// when they're swapped for others, or when a function's signals change.
-	const children = createMemo(() => props.children)
+	// None at all with the Scene's `skipChildren` bench switch on.
+	const children = createMemo(() => childrenToDraw(scene, props))
 	const content = () => {
 		const drawn = children()
 		return typeof drawn === 'function' ? drawn() : drawn
