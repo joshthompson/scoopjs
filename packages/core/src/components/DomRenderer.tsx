@@ -14,6 +14,7 @@ import { sortByAssetOrder } from '../drawOrder'
 import type { Vector } from '../types'
 import { Modal } from './Modal'
 import { ControllerSprite } from './Sprite'
+import { pointerHandlers } from './pointer'
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
 export type CanvasControllers = { id: string; controller: Controller<any> }[]
@@ -100,32 +101,8 @@ export function DomRenderer(props: DomRendererProps) {
 		</For>
 	)
 
-	const getMousePosition = (event: MouseEvent | TouchEvent) => {
-		const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect()
-		const x =
-			(event instanceof MouseEvent
-				? event.clientX - rect.left
-				: event.touches[0].clientX - rect.left) + props.scene.canvas.get().x()
-		const y =
-			(event instanceof MouseEvent
-				? event.clientY - rect.top
-				: event.touches[0].clientY - rect.top) + props.scene.canvas.get().y()
-		return { x, y }
-	}
-
-	const handleClick = (e: MouseEvent) => props.onClick?.(getMousePosition(e))
-	const handleTouchStart = (e: TouchEvent) => {
-		props.onClick?.(getMousePosition(e))
-		props.onMouseDown?.(getMousePosition(e))
-	}
-	const handleTouchEnd = (e: TouchEvent) => {
-		props.onClick?.(getMousePosition(e))
-		props.onMouseUp?.(getMousePosition(e))
-	}
-	const handleMouseDown = (e: MouseEvent) =>
-		props.onMouseDown?.(getMousePosition(e))
-	const handleMouseUp = (e: MouseEvent) =>
-		props.onMouseUp?.(getMousePosition(e))
+	// Shared with the Canvas Renderer, so both give the same coordinates
+	const pointer = pointerHandlers(props)
 
 	return (
 		<SceneContext.Provider value={props.scene}>
@@ -147,11 +124,11 @@ export function DomRenderer(props: DomRendererProps) {
 					height: `${props.scene.canvas.get().height()}px`,
 					...props.style,
 				}}
-				onClick={handleClick}
-				onTouchStart={handleTouchStart}
-				onTouchEnd={handleTouchEnd}
-				onMouseDown={handleMouseDown}
-				onMouseUp={handleMouseUp}
+				onClick={pointer.onClick}
+				onTouchStart={pointer.onTouchStart}
+				onTouchEnd={pointer.onTouchEnd}
+				onMouseDown={pointer.onMouseDown}
+				onMouseUp={pointer.onMouseUp}
 			>
 				{props.underlay}
 				{props.scene.options.cameraLayer ? (
