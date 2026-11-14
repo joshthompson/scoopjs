@@ -1,7 +1,11 @@
 import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
-import { mountWithoutElement, reportControllerIssues } from './canvasIssues'
+import {
+	mountWithoutElement,
+	reportControllerIssues,
+	reportSceneIssues,
+} from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
@@ -109,6 +113,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	const loadImage = options.loadImage ?? loadWithImg
 	const ctx = canvas.getContext('2d')
 	const filters = ctx && createFilterApplier(ctx)
+	reportSceneIssues(scene)
 
 	// Each image is loaded once, the first time a Sprite shows it, and is
 	// undefined until it has.

@@ -128,6 +128,23 @@ function describeIssue(scene: Scene, issue: CanvasIssue) {
 		.join('\n')
 }
 
+/** The Scene's options that only the DOM Renderer uses. */
+const domOnlyOptions = ['cameraLayer', 'standbyFrames'] as const
+
+/**
+ * Reports the Scene's options that do nothing under the Canvas Renderer, if
+ * they're on: once it's put on the page, since they're set for good.
+ */
+export function reportSceneIssues(scene: Scene) {
+	for (const option of domOnlyOptions) {
+		if (!scene.options[option]) continue
+		reportCanvasIssue(scene, {
+			feature: `scene.${option}`,
+			fix: 'it does nothing under the Canvas Renderer, so leave it off',
+		})
+	}
+}
+
 /** Reports `feature` for `controller`'s type. */
 function reportIssueOf(
 	scene: Scene,

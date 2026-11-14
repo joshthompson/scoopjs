@@ -348,6 +348,37 @@ describe('Canvas Issues', () => {
 		})
 	})
 
+	describe("for the Scene's DOM-only options", () => {
+		it('cameraLayer and standbyFrames, as soon as the Canvas Renderer is', () => {
+			paint([], { cameraLayer: true, standbyFrames: true })
+			expect(logged()).toEqual([
+				[
+					'[scoopjs:canvas] unsupported scene.cameraLayer on scene "test"',
+					'  fix: it does nothing under the Canvas Renderer, so leave it off',
+				].join('\n'),
+				[
+					'[scoopjs:canvas] unsupported scene.standbyFrames on scene "test"',
+					'  fix: it does nothing under the Canvas Renderer, so leave it off',
+				].join('\n'),
+			])
+		})
+
+		it('as records without a Controller', () => {
+			const scene = paint([], { cameraLayer: true })
+			expect(scene.canvasIssues()).toEqual([
+				{
+					feature: 'scene.cameraLayer',
+					fix: 'it does nothing under the Canvas Renderer, so leave it off',
+				},
+			])
+		})
+
+		it("not when they're off", () => {
+			const scene = paint([], { cameraLayer: false })
+			expect(scene.canvasIssues()).toEqual([])
+		})
+	})
+
 	describe('for a read of $ref, with onMount still run', () => {
 		it("giving undefined, since there's no element", () => {
 			const refs: unknown[] = []
