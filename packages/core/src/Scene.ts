@@ -13,7 +13,7 @@ import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
 import { parseFrame } from './frames'
 import { drawnBox } from './geometry'
-import { canvasStyle } from './styleTranslator'
+import { effectiveStyle } from './styleTranslator'
 import type { Rect, Vector } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
@@ -122,7 +122,7 @@ export class Scene<C extends AnyController = AnyController> {
 		const lookup = createRoot((dispose) => ({
 			dispose,
 			memo: createMemo(() => {
-				const top = this.controllers.get().map((c) => c.controller)
+				const top = this.controllers.get().map(({ controller }) => controller)
 				const all = [...top, ...top.flatMap(partsOf)]
 				const byId = new Map<string, AnyController>()
 				const byType = new Map<string, AnyController[]>()
@@ -228,15 +228,15 @@ export class Scene<C extends AnyController = AnyController> {
 	}
 
 	/**
-	 * The Controllers drawn over `point`, topmost first, whichever Renderer
-	 * draws them. Those hidden by their style, or by a carrier's, aren't
+	 * The Pointer Pick: the Controllers drawn over `point`, topmost first,
+	 * whichever Renderer draws them. Those hidden by their style, or by a carrier's, aren't
 	 * drawn, so they're left out. `point` is in the scene's coordinates, as
 	 * the Renderers' `onClick`, `onMouseDown` and `onMouseUp` give it.
 	 */
 	controllersAt(point: Vector): C[] {
 		return drawOrder(this)
 			.filter((controller) => {
-				if (canvasStyle(controller).hidden) return false
+				if (effectiveStyle(controller).hidden) return false
 				const box = drawnBox(controller)
 				return (
 					point.x >= box.x &&

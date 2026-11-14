@@ -170,7 +170,7 @@ export function createController<CP extends ControllerBaseType>(
 	})
 	const stepFrame = (step: FrameStep) => {
 		stepOwnFrame(step)
-		for (const child of childControllers()) child.stepFrame(step)
+		for (const part of childControllers()) part.stepFrame(step)
 	}
 	const destroy = () => {}
 	const setGame = (scene: Scene) => {
@@ -214,8 +214,8 @@ export function createController<CP extends ControllerBaseType>(
 			}
 			setAge(age() + 1)
 
-			for (const child of childControllers()) {
-				child.onEnterFrame($scene)
+			for (const part of childControllers()) {
+				part.onEnterFrame($scene)
 			}
 		},
 		destroy,

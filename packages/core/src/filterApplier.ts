@@ -1,6 +1,6 @@
 import type { LoadedImage } from './canvasPainter'
 import type { Matrix } from './geometry'
-import type { CanvasStyle, ColourFilter } from './styleTranslator'
+import type { ColourFilter, EffectiveStyle } from './styleTranslator'
 
 /** A colour filter as the context's own `filter` takes it. */
 function cssFilter({ name, amount }: ColourFilter) {
@@ -146,7 +146,7 @@ export function createFilterApplier(context: CanvasRenderingContext2D) {
 		 * `m` is the Sprite's transform, and `density` the screen's pixels to
 		 * one of the Renderer's.
 		 */
-		apply(style: CanvasStyle, m: Matrix, density: number) {
+		apply(style: EffectiveStyle, m: Matrix, density: number) {
 			context.globalAlpha = style.alpha
 			if (native) {
 				context.filter = style.colours.length

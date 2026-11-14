@@ -11,7 +11,7 @@ import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
 import { type ParsedFrame, parseFrame } from './frames'
 import { boxAround, spriteTransform } from './geometry'
-import { canvasStyle } from './styleTranslator'
+import { effectiveStyle } from './styleTranslator'
 import type { Rect } from './types'
 
 /** An image ready to paint, with its natural size. */
@@ -151,14 +151,14 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	 */
 	const paintCurrentFrame = (
 		context: CanvasRenderingContext2D,
-		c: AnyController,
+		controller: AnyController,
 	) => {
-		const sprite = c.sprite()
-		const written = sprite.frames[c.currentFrame()]
+		const sprite = controller.sprite()
+		const written = sprite.frames[controller.currentFrame()]
 		if (written === undefined) return
 		const frame = parseFrame(written)
 		const resolved = scene.resolveAsset(frame.url)
-		const original = image(resolved, c)
+		const original = image(resolved, controller)
 		if (!original) return
 		// Recoloured by the style's filter, where the context can't do it
 		const loaded = filters?.image(resolved, original) ?? original
@@ -200,7 +200,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		// screen, which nothing else says: it's a cheap thing to check.
 		if ((window.devicePixelRatio || 1) !== density) resize()
 		const camera = scene.canvas.get()
-		const view = {
+		const cameraRect = {
 			x: camera.x(),
 			y: camera.y(),
 			width: camera.width(),
@@ -211,32 +211,32 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		// Set every paint, since resizing a canvas resets it
 		ctx.imageSmoothingEnabled = !options.pixelated?.()
 		for (const controller of drawOrder(scene)) {
-			paintController(ctx, controller, view)
+			paintController(ctx, controller, cameraRect)
 		}
 	}
 
 	/**
-	 * Paints one Controller, unless it's outside the view. Each entry in the
+	 * Paints one Controller, unless it's outside what the camera sees. Each entry in the
 	 * draw order carries its whole transform, carriers and all, so it starts
 	 * from the camera every time rather than nesting inside its carrier.
 	 */
 	const paintController = (
 		context: CanvasRenderingContext2D,
 		controller: AnyController,
-		view: Rect,
+		cameraRect: Rect,
 	) => {
-		const style = canvasStyle(controller)
+		const style = effectiveStyle(controller)
 		if (style.hidden) return
 		const m = spriteTransform(controller)
-		// Nothing outside the view costs anything to paint. Each part is
+		// Nothing the camera doesn't see costs anything to paint. Each part is
 		// checked on its own, since one can reach out past its carrier.
 		const { width, height } = controller.sprite()
 		const box = boxAround(m, width, height)
 		if (
-			box.x >= view.x + view.width ||
-			box.y >= view.y + view.height ||
-			box.x + box.width <= view.x ||
-			box.y + box.height <= view.y
+			box.x >= cameraRect.x + cameraRect.width ||
+			box.y >= cameraRect.y + cameraRect.height ||
+			box.x + box.width <= cameraRect.x ||
+			box.y + box.height <= cameraRect.y
 		) {
 			return
 		}
@@ -247,8 +247,8 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			0,
 			0,
 			density,
-			-view.x * density,
-			-view.y * density,
+			-cameraRect.x * density,
+			-cameraRect.y * density,
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
 		filters?.apply(style, m, density)

@@ -1,8 +1,9 @@
 /**
  * The style translator: what the Canvas Renderer makes of a Controller's
  * `style`. `translateStyle` reads one Controller's own style, including what
- * it can't draw, for Canvas Issues. `canvasStyle` is how a Controller is
- * painted, with what it inherits from its carriers.
+ * it can't draw, for Canvas Issues. `effectiveStyle` is how a Controller is
+ * drawn, with what it inherits from its carriers: what the Canvas Renderer
+ * paints with, and the Pointer Pick goes by under either Renderer.
  */
 import type { JSX } from 'solid-js'
 import type { AnyController } from './Controller'
@@ -256,8 +257,12 @@ export function translateStyle(
 	}
 }
 
-/** What a canvas paints a Controller with, carriers and all. */
-export interface CanvasStyle {
+/**
+ * The style a Controller is drawn with, carriers and all, whichever Renderer
+ * draws it: the Canvas Renderer paints with it, and the Pointer Pick leaves
+ * out what it hides.
+ */
+export interface EffectiveStyle {
 	/**
 	 * Its opacity times every carrier's, as a page's nested elements fade
 	 * together.
@@ -283,14 +288,18 @@ export interface CanvasStyle {
  * How a Controller is painted: its own style with what it inherits from
  * every Controller carrying it, as the DOM Renderer nests it inside them.
  */
-export function canvasStyle(controller: AnyController): CanvasStyle {
+export function effectiveStyle(controller: AnyController): EffectiveStyle {
 	let alpha = 1
 	let visible: boolean | undefined
 	let removed = false
 	const colours: ColourFilter[] = []
 	let shadow: Shadow | undefined
-	for (let c: AnyController | undefined = controller; c; c = c.carrier()) {
-		const own = translateStyle(c.sprite().style)
+	for (
+		let level: AnyController | undefined = controller;
+		level;
+		level = level.carrier()
+	) {
+		const own = translateStyle(level.sprite().style)
 		alpha *= own.alpha
 		// The nearest that says, itself first
 		visible ??= own.visible
