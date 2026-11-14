@@ -66,7 +66,7 @@ It lives in Core and is exported next to `DomRenderer`.
 - A full repaint on `requestAnimationFrame`, only if something changed since the last one: a Tick, a Ticker, the camera, a resize, or an image finishing loading. Drawing only the areas that changed waits until the benchmark asks for it.
 - Sprites whose drawn box is outside the view are skipped.
 - The `<canvas>` backing store is the Renderer's size times `devicePixelRatio`. CSS transforms on the element, like run-game's zoom, keep working.
-- A `pixelated` prop turns image smoothing off for the whole Renderer.
+- A `pixelated` prop turns image smoothing off for the whole Renderer. A Sprite's `image-rendering` turns it off for that Sprite and the parts it carries (see [Style](#style)).
 
 ### Draw order
 
@@ -101,6 +101,7 @@ The Canvas Renderer honours the `style` keys it can reproduce, and reports the r
 | `transform` with `translate`, `scale`, `rotate`, `skew` | canvas transforms, after the engine's own scale and rotation, as CSS would apply them |
 | `translate`, `transform-origin` | likewise |
 | `filter` with `hue-rotate`, `brightness`, `sepia`, `saturate`, `drop-shadow` | see below |
+| `image-rendering: pixelated`, `crisp-edges`, `auto`, `smooth` | `imageSmoothingEnabled` off for `pixelated` and `crisp-edges`, inherited through carriers; `auto` and `smooth` leave it to the `pixelated` prop |
 
 **Filters.**
 - Where the browser supports `ctx.filter`, it's used.

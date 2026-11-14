@@ -40,7 +40,10 @@ export type ImageLoader = (
 export interface CanvasPainterOptions {
 	scene: Scene
 	canvas: HTMLCanvasElement
-	/** Turns image smoothing off, for pixel art. */
+	/**
+	 * Turns image smoothing off for every Sprite, for pixel art. A Sprite can
+	 * turn it off for itself with `image-rendering` in its style.
+	 */
 	pixelated?: Accessor<boolean>
 	/** How images load: the browser's own way unless a test says otherwise. */
 	loadImage?: ImageLoader
@@ -214,10 +217,9 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		}
 		ctx.setTransform(1, 0, 0, 1, 0, 0)
 		ctx.clearRect(0, 0, canvas.width, canvas.height)
-		// Set every paint, since resizing a canvas resets it
-		ctx.imageSmoothingEnabled = !options.pixelated?.()
+		const pixelated = !!options.pixelated?.()
 		for (const controller of drawOrder(scene)) {
-			paintController(ctx, controller, cameraRect)
+			paintController(ctx, controller, cameraRect, pixelated)
 		}
 	}
 
@@ -225,11 +227,13 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 	 * Paints one Controller, unless it's outside what the camera sees. Each entry in the
 	 * draw order carries its whole transform, carriers and all, so it starts
 	 * from the camera every time rather than nesting inside its carrier.
+	 * `pixelated` is the Renderer's prop, which turns smoothing off for all.
 	 */
 	const paintController = (
 		context: CanvasRenderingContext2D,
 		controller: AnyController,
 		cameraRect: Rect,
+		pixelated: boolean,
 	) => {
 		const style = effectiveStyle(controller)
 		if (style.hidden) return
@@ -258,6 +262,10 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
 		filters?.apply(style, m, density)
+		// Set for every Sprite, so one's `image-rendering` isn't left for the
+		// next, and since resizing a canvas resets it. A Draw Hook paints
+		// with it too.
+		context.imageSmoothingEnabled = !(pixelated || style.pixelated)
 		paintSprite(context, controller)
 	}
 

@@ -278,8 +278,9 @@ export function reportControllerIssues(
 			report(`style.filter ${written}`, filterFixes[name] ?? drawHook)
 		}
 	}
-	// Where the Sprite is drawn, and its alpha, which a Draw Hook's context
-	// is set to already, so these are still reported with one.
+	// Where the Sprite is drawn, its alpha and its image smoothing, which a
+	// Draw Hook's context is set to already, so these are still reported
+	// with one.
 	for (const key of style.unreadable) {
 		const value = (sprite.style as Record<string, unknown>)[key]
 		report(`style.${key} ${String(value)}`, unreadableFixes[key])
@@ -304,6 +305,8 @@ const unreadableFixes: Record<string, string> = {
 	translate: 'give it lengths in px or %, which a canvas can read',
 	'transform-origin':
 		'give it lengths in px or % or keywords such as left and top, which a canvas can read',
+	'image-rendering':
+		'give it pixelated, crisp-edges, auto or smooth, which a canvas can read',
 }
 
 /** How to do without a `transform` function a canvas doesn't draw. */

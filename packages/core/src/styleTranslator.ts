@@ -56,6 +56,12 @@ export interface TranslatedStyle {
 	/** `z-index`, which orders it among Controllers at its level. */
 	zIndex: number
 	/**
+	 * `image-rendering`: true where it turns image smoothing off, false where
+	 * it leaves that to the Renderer, or undefined to take its carrier's, as
+	 * CSS inherits it.
+	 */
+	pixelated: boolean | undefined
+	/**
 	 * The keys it has that a canvas can't draw, which are Canvas Issues.
 	 * Keys left without a value aren't counted, since the page leaves them out.
 	 */
@@ -92,6 +98,19 @@ const translatedKeys = new Set([
 	'translate',
 	'transform-origin',
 	'filter',
+	'image-rendering',
+])
+
+/**
+ * The `image-rendering` values a canvas can reproduce, and whether each
+ * turns image smoothing off. `auto` and `smooth` don't turn it on: they
+ * leave it to the Renderer's `pixelated` prop, which is for every Sprite.
+ */
+const pixelatedBy = new Map([
+	['pixelated', true],
+	['crisp-edges', true],
+	['auto', false],
+	['smooth', false],
 ])
 
 /** A CSS number or percentage, or undefined for anything else. */
@@ -236,6 +255,11 @@ export function translateStyle(
 	const css = (style ?? {}) as Record<string, unknown>
 	const opacity = absent(css.opacity) ? 1 : amount(css.opacity)
 	const visibility = absent(css.visibility) ? undefined : String(css.visibility)
+	const rendering = absent(css['image-rendering'])
+		? undefined
+		: String(css['image-rendering']).trim()
+	const pixelated =
+		rendering === undefined ? undefined : pixelatedBy.get(rendering)
 	return {
 		alpha: clamp(opacity ?? 1),
 		visible:
@@ -244,11 +268,15 @@ export function translateStyle(
 				: visibility === 'visible',
 		removed: css.display === 'none',
 		zIndex: zIndex(style),
+		pixelated,
 		...translateFilter(css.filter),
 		unsupportedTransforms: unsupportedTransforms(css.transform),
 		unreadable: [
 			...(opacity === undefined ? ['opacity'] : []),
 			...(readableZIndex(css['z-index']) ? [] : ['z-index']),
+			...(rendering !== undefined && pixelated === undefined
+				? ['image-rendering']
+				: []),
 			...unreadablePlacement(css),
 		],
 		untranslatable: Object.keys(css).filter(
@@ -282,6 +310,14 @@ export interface EffectiveStyle {
 	 * which is close enough unless a part is turned against its carrier.
 	 */
 	shadow: Shadow | undefined
+	/**
+	 * Whether its image smoothing is off, by the nearest `image-rendering`
+	 * that says, itself first. The DOM Renderer nests an Attached Controller
+	 * inside its carrier, so a carrier's `image-rendering` reaches its parts
+	 * as CSS inherits it, unless a part says otherwise. The Renderer's own
+	 * `pixelated` prop turns it off whatever this says.
+	 */
+	pixelated: boolean
 }
 
 /**
@@ -294,6 +330,7 @@ export function effectiveStyle(controller: AnyController): EffectiveStyle {
 	let removed = false
 	const colours: ColourFilter[] = []
 	let shadow: Shadow | undefined
+	let pixelated: boolean | undefined
 	for (
 		let level: AnyController | undefined = controller;
 		level;
@@ -306,6 +343,13 @@ export function effectiveStyle(controller: AnyController): EffectiveStyle {
 		removed ||= own.removed
 		colours.push(...own.colours)
 		shadow ??= own.shadow
+		pixelated ??= own.pixelated
 	}
-	return { alpha, hidden: removed || visible === false, colours, shadow }
+	return {
+		alpha,
+		hidden: removed || visible === false,
+		colours,
+		shadow,
+		pixelated: pixelated ?? false,
+	}
 }

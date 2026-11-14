@@ -548,10 +548,16 @@ describe('the Canvas Renderer paints', () => {
 		function hooked(
 			id: string,
 			draw: ControllerProps<ControllerBaseType>['draw'],
-			options: { x?: number; frames?: string[]; frame?: number } = {},
+			options: {
+				x?: number
+				frames?: string[]
+				frame?: number
+				style?: JSX.CSSProperties
+			} = {},
 		) {
 			return createController<ControllerBaseType>({
 				frames: options.frames ?? [`${id}.png`],
+				style: options.style,
 				draw,
 				init: () => ({
 					id,
@@ -585,6 +591,19 @@ describe('the Canvas Renderer paints', () => {
 				{ a: 0, b: 1, c: -1, d: 0, e: 10, f: -5 },
 			])
 			expect(ctx.draws).toEqual([])
+		})
+
+		it("with its Sprite's image smoothing, for images it draws itself", () => {
+			const smoothing: boolean[] = []
+			const record = ({ ctx: hookCtx }: { ctx: CanvasRenderingContext2D }) => {
+				smoothing.push(hookCtx.imageSmoothingEnabled)
+			}
+			paint([
+				hooked('pixel', record, { style: { 'image-rendering': 'pixelated' } }),
+				hooked('photo', record),
+			])
+			frames.run()
+			expect(smoothing).toEqual([false, true])
 		})
 
 		it('able to paint the current Frame with drawDefault(), then draw over it', () => {
@@ -959,6 +978,50 @@ describe('the Canvas Renderer paints', () => {
 				frames.run()
 				expect(recolourings()).toBe(1002)
 			})
+		})
+
+		it('image-rendering, turning smoothing off for pixelated and crisp-edges, which its parts inherit unless they say otherwise', () => {
+			loadAll('tree', 'leaf', 'fruit', 'rock', 'cloud', 'plain')
+			const tree = sprite('tree', { style: { 'image-rendering': 'pixelated' } })
+			tree.attach(sprite('leaf'))
+			tree.attach(sprite('fruit', { style: { 'image-rendering': 'auto' } }))
+			const { ctx } = paint([
+				tree,
+				sprite('rock', { style: { 'image-rendering': 'crisp-edges' } }),
+				sprite('cloud', { style: { 'image-rendering': 'smooth' } }),
+				// Painted after one that's pixelated, which isn't left set for it
+				sprite('plain'),
+			])
+			frames.run()
+			expect(
+				ctx.draws.map(({ image, state }) => [
+					image,
+					state.imageSmoothingEnabled,
+				]),
+			).toEqual([
+				['tree.png', false],
+				['leaf.png', false],
+				['fruit.png', true],
+				['rock.png', false],
+				['cloud.png', true],
+				['plain.png', true],
+			])
+		})
+
+		it("image-rendering: auto and smooth leaving smoothing to the Renderer's pixelated", () => {
+			loadAll('auto', 'smooth')
+			const { ctx } = paint(
+				[
+					sprite('auto', { style: { 'image-rendering': 'auto' } }),
+					sprite('smooth', { style: { 'image-rendering': 'smooth' } }),
+				],
+				{ pixelated: true },
+			)
+			frames.run()
+			expect(ctx.draws.map((d) => d.state.imageSmoothingEnabled)).toEqual([
+				false,
+				false,
+			])
 		})
 
 		it('nothing for visibility: hidden, which its parts inherit unless they say visible', () => {

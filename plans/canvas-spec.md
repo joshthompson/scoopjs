@@ -13,7 +13,7 @@ There's no way to try a different way of drawing without rewriting a game. So no
 A second Renderer, the **Canvas Renderer**, that a game opts into by mounting it in place of the DOM Renderer. The Scene and its Controllers stay exactly as they are. The game's UI (underlay, overlay, dialogs, the Modal, the loading screen) stays page elements around the `<canvas>`.
 
 - It paints every Sprite onto one `<canvas>`, in the same order the DOM Renderer draws them.
-- It honours the parts of a Controller's `style` that a canvas can reproduce: opacity, hiding, stacking, transforms and colour filters.
+- It honours the parts of a Controller's `style` that a canvas can reproduce: opacity, hiding, stacking, transforms, colour filters and pixelated image rendering.
 - Anything it can't draw (children, classes, clip paths, transitions and the like) draws nothing. It's reported to the console as a **Canvas Issue**, with where the Controller was created and how to fix it. A developer or an agent can then work through the list.
 - A Controller can take over its own painting with a **Draw Hook**.
 
@@ -162,6 +162,7 @@ Then the two Renderers are benchmarked against each other in run-game. The Canva
   - a stacking order
   - an extra transform
   - a filter description
+  - whether image smoothing is off, which attached parts inherit
   - a list of untranslatable keys
 
   It works on the same style objects games already pass, and never parses anything outside the supported list.
@@ -187,8 +188,9 @@ Then the two Renderers are benchmarked against each other in run-game. The Canva
   - `translate`
   - `transform-origin`
   - `filter` (`hue-rotate`, `brightness`, `sepia`, `saturate`, `drop-shadow`)
+  - `image-rendering` (`pixelated` and `crisp-edges` turn image smoothing off for that Sprite and the parts it carries; `auto` and `smooth` leave it to the `pixelated` prop)
 
-  Every other key is a Canvas Issue.
+  Every other key is a Canvas Issue, and so is any other `image-rendering` value.
 - **A Canvas Issue** carries:
   - the feature (e.g. `children`, `class`, `inner.style`, `style.clip-path`, `$ref`, `scene.cameraLayer`)
   - the Controller type

@@ -2,7 +2,7 @@
 
 A game opts into the Canvas Renderer by putting it on the page in place of the DOM Renderer. The Scene doesn't know which one draws it. The Canvas Renderer never emulates the DOM.
 
-- It honours the `style` keys it can reproduce on a canvas: `opacity`, `visibility`, `display: none`, `z-index`, a fixed set of `filter` functions, and `transform`, `translate` and `transform-origin`.
+- It honours the `style` keys it can reproduce on a canvas: `opacity`, `visibility`, `display: none`, `z-index`, a fixed set of `filter` functions, `transform`, `translate` and `transform-origin`, and `image-rendering` values that turn image smoothing off or leave it alone.
 - Everything else draws nothing. This covers `children`, `class`, `inner.style`, a read of `$ref`, and the other `style` keys such as `clip-path`, `transition` and gradients.
 - For each Controller type and feature, the first time one of these is drawn it logs one `console.error`. The error has a fixed `[scoopjs:canvas]` prefix and the place the Controller was created, so an agent can work through them. `scene.canvasIssues()` returns the same list.
 

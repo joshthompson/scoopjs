@@ -389,6 +389,7 @@ describe('Canvas Issues', () => {
 						opacity: 'var(--o)',
 						'transform-origin': 'calc(10px)',
 						'z-index': 'var(--z)',
+						'image-rendering': '-webkit-optimize-contrast',
 					},
 				}),
 			])
@@ -400,6 +401,10 @@ describe('Canvas Issues', () => {
 				{
 					feature: 'style.z-index var(--z)',
 					fix: 'give it a whole number, which a canvas can read',
+				},
+				{
+					feature: 'style.image-rendering -webkit-optimize-contrast',
+					fix: 'give it pixelated, crisp-edges, auto or smooth, which a canvas can read',
 				},
 				{
 					feature: 'style.translate 1em 2em',
@@ -423,6 +428,7 @@ describe('Canvas Issues', () => {
 						visibility: 'visible',
 						display: 'block',
 						filter: 'none',
+						'image-rendering': 'pixelated',
 					},
 				}),
 				sprite('b', {
@@ -431,8 +437,11 @@ describe('Canvas Issues', () => {
 						opacity: 1,
 						'transform-origin': '0 0',
 						'z-index': 3,
+						'image-rendering': 'crisp-edges',
 					},
 				}),
+				sprite('c', { style: { 'image-rendering': 'auto' } }),
+				sprite('d', { style: { 'image-rendering': 'smooth' } }),
 			])
 			expect(scene.canvasIssues()).toEqual([])
 		})

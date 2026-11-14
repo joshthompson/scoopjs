@@ -134,6 +134,12 @@ export const Game = () => <CanvasRenderer scene={scene} pixelated />
 - `filter` with `hue-rotate`, `brightness`, `sepia` and `saturate`, and one
   `drop-shadow`. On WebKit, which has no canvas `filter`, each image is
   recoloured instead.
+- `image-rendering`: `pixelated` and `crisp-edges` turn image smoothing off
+  for that sprite, and `auto` and `smooth` leave it to the Renderer's
+  `pixelated` prop, which turns it off for every sprite whatever they say.
+  Attached controllers inherit it, as they do on the page, unless they say
+  otherwise. It's only how the sprite is painted: a canvas scaled up by CSS
+  is smoothed as a whole unless the Renderer is `pixelated`.
 
 Anything else in `style`, a value it can't read (such as `var(--o)` or
 `1em`), `class`, `inner.style` and `children` are Canvas Issues.
@@ -185,6 +191,11 @@ of the game's own) and how to fix it:
   called from src/draw/course.tsx:112
   fix: clip with ctx.clip() in a Draw Hook
 ```
+
+Under Vite in development, `created at` names the right file, but its line is
+in the compiled file Vite serves, not your source, since Chrome doesn't map
+stack traces through source maps: the type and id are the reliable way to find
+it.
 
 `scene.canvasIssues()` gives the same as plain records (`CanvasIssue`), so a
 game, or an agent porting one, can read the whole list in one call. It's
