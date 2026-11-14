@@ -598,6 +598,79 @@ describe('the Canvas Renderer paints', () => {
 			expect(ctx.draws).toEqual([])
 		})
 
+		describe('reaching past its box, with drawReach', () => {
+			/** A 20×10 Sprite at `x` whose Draw Hook says when it ran. */
+			function reaching(
+				id: string,
+				x: number,
+				drawReach: ControllerProps<ControllerBaseType>['drawReach'],
+				ran: string[],
+				xScale = 1,
+			) {
+				return createController<ControllerBaseType>({
+					frames: [`${id}.png`],
+					drawReach,
+					draw: () => {
+						ran.push(id)
+					},
+					init: () => ({
+						id,
+						type: id,
+						x: () => x,
+						y: () => 40,
+						width: () => 20,
+						height: () => 10,
+						xScale: () => xScale,
+					}),
+				})
+			}
+
+			it('painted while what it reaches is in view, though its box is not', () => {
+				const ran: string[] = []
+				// The view is 0 to 100 across; each box is off its left edge
+				paint([
+					reaching('none', -30, undefined, ran),
+					reaching('right', -30, { right: 15 }, ran),
+					reaching('short', -30, { right: 5 }, ran),
+					reaching('all', -30, 15, ran),
+					reaching('top', -30, { top: 500 }, ran),
+				])
+				frames.run()
+				expect(ran).toEqual(['right', 'all'])
+			})
+
+			it('in its own pixels, so its right reaches left when flipped', () => {
+				const ran: string[] = []
+				// Off the view's right edge, facing left
+				paint([
+					reaching('flipped', 110, { right: 15 }, ran, -1),
+					reaching('unflipped', 110, { right: 15 }, ran),
+				])
+				frames.run()
+				expect(ran).toEqual(['flipped'])
+			})
+
+			it('passed on by createConnectedController', () => {
+				const ran: string[] = []
+				const base = reaching('base', 30, undefined, ran)
+				const part = createConnectedController({
+					base,
+					type: 'part',
+					offset: { x: 100, y: 0 },
+					width: () => 10,
+					height: () => 10,
+					drawReach: { left: 50 },
+					draw: () => {
+						ran.push('part')
+					},
+				})
+				base.attach(part)
+				paint([base])
+				frames.run()
+				expect(ran).toEqual(['base', 'part'])
+			})
+		})
+
 		it("with its Sprite's image smoothing, for images it draws itself", () => {
 			const smoothing: boolean[] = []
 			const record = ({ ctx: hookCtx }: { ctx: CanvasRenderingContext2D }) => {

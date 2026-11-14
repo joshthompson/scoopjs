@@ -202,6 +202,11 @@ const badge = createController({
   are still painted after it.
 - On WebKit the colour filters only recolour what `drawDefault()` paints, not
   what the hook draws itself.
+- It may paint outside the box, but a sprite whose box the camera can't see
+  isn't painted, so far-reaching art vanishes near the screen's edges. Say
+  how far it reaches with `drawReach`, in the sprite's own pixels: one number
+  for every side, or `{ left, top, right, bottom }`. It's then painted while
+  any of that is in view. What it collides with is still its box.
 
 ### Canvas Issues
 

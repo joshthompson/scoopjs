@@ -378,8 +378,9 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		const m = spriteTransform(controller)
 		// Nothing the camera doesn't see costs anything to paint. Each part is
 		// checked on its own, since one can reach out past its carrier.
+		// Each part is checked with all its Draw Hook reaches past its box
 		const { width, height } = controller.sprite()
-		const box = boxAround(m, width, height)
+		const box = boxAround(m, width, height, controller.drawReach)
 		if (
 			box.x >= cameraRect.x + cameraRect.width ||
 			box.y >= cameraRect.y + cameraRect.height ||

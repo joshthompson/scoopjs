@@ -1,4 +1,4 @@
-import type { AnyController } from './Controller'
+import type { AnyController, Reach } from './Controller'
 import { absent, angle, length } from './cssValues'
 import type { Rect, Vector } from './types'
 
@@ -309,14 +309,24 @@ export function drawnBox(controller: AnyController): Rect {
 
 /**
  * The axis-aligned box around the box (0, 0) to (width, height) moved by
- * `m`: `drawnBox`, for a caller that has the transform already.
+ * `m`: `drawnBox`, for a caller that has the transform already. With
+ * `reach`, around that box grown by it, side by side, before it's moved.
  */
-export function boxAround(m: Matrix, width: number, height: number): Rect {
+export function boxAround(
+	m: Matrix,
+	width: number,
+	height: number,
+	reach: Reach = { left: 0, top: 0, right: 0, bottom: 0 },
+): Rect {
+	const left = -reach.left
+	const top = -reach.top
+	const right = width + reach.right
+	const bottom = height + reach.bottom
 	const corners = [
-		apply(m, 0, 0),
-		apply(m, width, 0),
-		apply(m, 0, height),
-		apply(m, width, height),
+		apply(m, left, top),
+		apply(m, right, top),
+		apply(m, left, bottom),
+		apply(m, right, bottom),
 	]
 	const xs = corners.map((p) => p.x)
 	const ys = corners.map((p) => p.y)

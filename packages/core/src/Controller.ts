@@ -70,7 +70,30 @@ export interface Controller<CP extends ControllerBaseType> {
 	 * Renderer to call. Only there if it was given one.
 	 */
 	draw?: (painting: DrawPainting) => void
+	/** How far its Draw Hook paints past its box, side by side: see `drawReach`. */
+	drawReach?: Reach
 }
+
+/** How far each side of a Sprite's box a Draw Hook paints past it. */
+export interface Reach {
+	left: number
+	top: number
+	right: number
+	bottom: number
+}
+
+/** A `drawReach` as a game gives it: one number for every side, or some sides'. */
+export type DrawReach = number | Partial<Reach>
+
+const reachOf = (reach: DrawReach): Reach =>
+	typeof reach === 'number'
+		? { left: reach, top: reach, right: reach, bottom: reach }
+		: {
+				left: reach.left ?? 0,
+				top: reach.top ?? 0,
+				right: reach.right ?? 0,
+				bottom: reach.bottom ?? 0,
+			}
 
 /** What the Canvas Renderer hands a Controller's Draw Hook. */
 export interface DrawPainting {
@@ -143,6 +166,15 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	 * hook draws itself.
 	 */
 	draw?: (data: DrawData<T>) => void
+	/**
+	 * How far its Draw Hook paints past its Sprite's box, in the Sprite's own
+	 * pixels, so turning with it: one number for every side, or some sides'.
+	 * The Canvas Renderer skips a Controller the camera can't see, so art
+	 * that reaches well past its box would vanish near the screen's edges.
+	 * With this it's painted while any of what it reaches is in view. Only
+	 * for painting: what it collides with is still its box.
+	 */
+	drawReach?: DrawReach
 }
 
 type ExtractControllerType<T> = T extends Controller<infer A> ? A : never
@@ -249,6 +281,9 @@ export function createController<CP extends ControllerBaseType>(
 	if (draw) {
 		controller.draw = (painting) =>
 			draw({ ...painting, $: data, $currentFrame: currentFrame() })
+	}
+	if (options.drawReach !== undefined) {
+		controller.drawReach = reachOf(options.drawReach)
 	}
 	setCarriers.set(controller, setCarrier)
 	recordCreation(controller, creation)
@@ -366,6 +401,8 @@ export function createConnectedController<
 	draw?: ControllerProps<
 		ExtractControllerType<Controller<T & ControllerBaseType>>
 	>['draw']
+	/** How far its Draw Hook paints past its box, as `createController`'s `drawReach`. */
+	drawReach?: DrawReach
 	frame?: ($: ExtractControllerType<C>) => number
 	style?: ($: ExtractControllerType<C>) => JSX.CSSProperties
 	randomStartFrame?: boolean
@@ -409,5 +446,6 @@ export function createConnectedController<
 		onEnterFrame: options.onEnterFrame,
 		onMount: options.onMount,
 		draw: options.draw,
+		drawReach: options.drawReach,
 	})
 }
