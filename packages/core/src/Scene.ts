@@ -11,6 +11,7 @@ import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
 import { type CanvasIssue, canvasIssuesOf } from './canvasIssues'
 import type { Canvas, CanvasControllers } from './components/DomRenderer'
 import { drawOrder } from './drawOrder'
+import { parseFrame } from './frames'
 import { drawnBox } from './geometry'
 import { canvasStyle } from './styleTranslator'
 import type { Rect, Vector } from './types'
@@ -328,7 +329,7 @@ export class Scene<C extends AnyController = AnyController> {
 			.get()
 			.flatMap(({ controller }) => controller.frames ?? [])
 			// Preload whichever variant Sprite will actually render
-			.map((frame) => this.resolveAsset(frame.split('#')[0]))
+			.map((frame) => this.resolveAsset(parseFrame(frame).url))
 
 		const imageAssets = [
 			...new Set([...frameAssets, ...(this.options.images ?? [])]),

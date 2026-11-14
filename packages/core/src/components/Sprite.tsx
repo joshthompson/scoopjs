@@ -15,7 +15,7 @@ import type { AnyController } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
 import { childrenToDraw } from '../children'
-import { createFrameStepper } from '../frames'
+import { createFrameStepper, frameInterval, parseFrame } from '../frames'
 import type { Vector } from '../types'
 
 export interface Sprite {
@@ -89,10 +89,7 @@ function createFallbackStepper(
 ) {
 	const { currentFrame, step } = createFrameStepper({
 		frameCount: () => props.frames.length,
-		frameInterval: () =>
-			typeof props.frameInterval === 'function'
-				? props.frameInterval()
-				: (props.frameInterval ?? 100),
+		frameInterval: () => frameInterval(props.frameInterval),
 		playing: () => props.state === 'play',
 		frame: () => props.frame,
 		randomStartFrame: props.randomStartFrame,
@@ -131,17 +128,13 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 			: () => props.currentFrame ?? 0
 	const frames = createMemo(() =>
 		props.frames.map((frame) => {
-			// Every sprite goes through here, so this is where a game's
-			// `resolveAsset` swaps in whichever image it wants shown.
-			const image = scene.resolveAsset(frame.split('#')[0])
-			const [left, top, width, height] = frame
-				.split('#')[1]
-				?.split(',')
-				.map(Number) ?? [0, 0, 0, 0]
+			const { url, x, y, width, height } = parseFrame(frame)
 			return {
-				image,
-				left,
-				top,
+				// Every sprite goes through here, so this is where a game's
+				// `resolveAsset` swaps in whichever image it wants shown.
+				image: scene.resolveAsset(url),
+				left: x,
+				top: y,
 				width,
 				height,
 			}

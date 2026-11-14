@@ -9,6 +9,7 @@ import {
 } from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
+import { type ParsedFrame, parseFrame } from './frames'
 import { boxAround, spriteTransform } from './geometry'
 import { canvasStyle } from './styleTranslator'
 import type { Rect } from './types'
@@ -73,12 +74,11 @@ function firstCopy(offset: number, size: number) {
 function paintFrame(
 	context: CanvasRenderingContext2D,
 	loaded: LoadedImage,
-	frame: string,
+	frame: ParsedFrame,
 	width: number,
 	height: number,
 ) {
-	const [left = 0, top = 0, cropWidth, cropHeight] =
-		frame.split('#')[1]?.split(',').map(Number) ?? []
+	const { x: left, y: top, width: cropWidth, height: cropHeight } = frame
 	const cropped = !!cropWidth && !!cropHeight
 	const sheetHeight = height
 	const sheetWidth = cropped ? (loaded.width * height) / loaded.height : width
@@ -154,10 +154,10 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 		c: AnyController,
 	) => {
 		const sprite = c.sprite()
-		const frame = sprite.frames[c.currentFrame()]
-		if (frame === undefined) return
-		const [url] = frame.split('#')
-		const resolved = scene.resolveAsset(url)
+		const written = sprite.frames[c.currentFrame()]
+		if (written === undefined) return
+		const frame = parseFrame(written)
+		const resolved = scene.resolveAsset(frame.url)
 		const original = image(resolved, c)
 		if (!original) return
 		// Recoloured by the style's filter, where the context can't do it

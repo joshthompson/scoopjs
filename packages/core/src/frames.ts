@@ -9,6 +9,37 @@ export type FrameStep =
 	| { elapsed: number; paused?: boolean }
 	| { now: number; paused?: boolean }
 
+/**
+ * A Frame as a Sprite's `frames` lists it: an image URL, or a crop of a
+ * sprite sheet as `url#x,y,width,height`. Without a crop, x, y, width and
+ * height are 0.
+ */
+export interface ParsedFrame {
+	url: string
+	x: number
+	y: number
+	width: number
+	height: number
+}
+
+/** Reads a Frame: see `ParsedFrame`. */
+export function parseFrame(frame: string): ParsedFrame {
+	const [url, crop] = frame.split('#')
+	const [x = 0, y = 0, width = 0, height = 0] =
+		crop?.split(',').map(Number) ?? []
+	return { url, x, y, width, height }
+}
+
+/**
+ * How long each Frame shows for, in milliseconds, from a Sprite's
+ * `frameInterval`, which can be a number or a signal of one: 100 without.
+ */
+export function frameInterval(
+	interval: number | Accessor<number> | undefined,
+): number {
+	return (typeof interval === 'function' ? interval() : interval) ?? 100
+}
+
 /** What a Frame Stepper reads, each time it steps. */
 export interface FrameSource {
 	frameCount: () => number
@@ -54,7 +85,7 @@ export function createFrameStepper(source: FrameSource): {
 		setStepped((prev) => (prev + steps) % source.frameCount())
 	}
 
-	const step = (step: FrameStep) => {
+	const step = (frameStep: FrameStep) => {
 		// A newly set `frame` wins over this step, as the DOM Sprite's did
 		const frame = newFrame()
 		const jumped = frame !== undefined
@@ -63,13 +94,13 @@ export function createFrameStepper(source: FrameSource): {
 			setStepped(frame)
 		}
 		const animating =
-			!step.paused && source.playing() && source.frameCount() > 0
+			!frameStep.paused && source.playing() && source.frameCount() > 0
 
-		if ('now' in step) {
+		if ('now' in frameStep) {
 			// A step as soon as it starts, and then one whenever a Frame is due.
 			// Each step is timed from when the Frame was due, so intervals don't
 			// round up to the display's own rate.
-			const { now } = step
+			const { now } = frameStep
 			if (nextFrameAt !== undefined && now < nextFrameAt) return
 			nextFrameAt =
 				nextFrameAt === undefined
@@ -87,7 +118,7 @@ export function createFrameStepper(source: FrameSource): {
 		// An infinite interval is a Sprite that never changes Frame, like the
 		// scenery.
 		if (!Number.isFinite(interval) || interval <= 0) return
-		shown += step.elapsed
+		shown += frameStep.elapsed
 		const steps = Math.floor(shown / interval)
 		shown -= steps * interval
 		if (!jumped) advance(steps)

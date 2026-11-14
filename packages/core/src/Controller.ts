@@ -7,7 +7,7 @@ import {
 	isOverlapping,
 } from './collision'
 import type { Sprite } from './components/Sprite'
-import { type FrameStep, createFrameStepper } from './frames'
+import { type FrameStep, createFrameStepper, frameInterval } from './frames'
 import { drawnBox } from './geometry'
 import type { Vector } from './types'
 
@@ -163,10 +163,7 @@ export function createController<CP extends ControllerBaseType>(
 	// the Frame on screen.
 	const { currentFrame, step: stepOwnFrame } = createFrameStepper({
 		frameCount: () => frames().length,
-		frameInterval: () => {
-			const interval = data.frameInterval?.()
-			return (typeof interval === 'function' ? interval() : interval) ?? 100
-		},
+		frameInterval: () => frameInterval(data.frameInterval?.()),
 		playing: () => data.state?.() === 'play',
 		frame: () => data.frame?.(),
 		randomStartFrame: options.randomStartFrame,
