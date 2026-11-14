@@ -299,6 +299,57 @@ describe('Canvas Issues', () => {
 			])
 		})
 
+		it('not style keys left without a value, as the page leaves them out', () => {
+			const scene = paint([
+				sprite('a', { style: { 'clip-path': undefined, 'border-radius': '' } }),
+			])
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('each filter function whose arguments it cannot read', () => {
+			const scene = paint([
+				sprite('a', {
+					type: 'a',
+					style: {
+						filter:
+							'hue-rotate(30deg) brightness(-1) drop-shadow(1em 1em) contrast(2) url(#glow)',
+					},
+				}),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'style.filter brightness()',
+				'style.filter drop-shadow()',
+				'style.filter contrast()',
+				'style.filter url()',
+			])
+		})
+
+		it('any drop-shadow after the first, since a canvas casts only one', () => {
+			const scene = paint([
+				sprite('a', {
+					style: {
+						filter: 'drop-shadow(1px 0 white) drop-shadow(-1px 0 white)',
+					},
+				}),
+			])
+			expect(reported(scene)).toEqual([
+				{
+					feature: 'style.filter drop-shadow()',
+					fix: 'a canvas casts one drop-shadow, its lengths in px: keep one, or draw the rest in a Draw Hook',
+				},
+			])
+		})
+
+		it('a filter it cannot read at all, as it is written, but not none', () => {
+			const scene = paint([
+				sprite('a', { style: { filter: 'sepia(1) glow' } }),
+				sprite('b', { style: { filter: 'none' } }),
+			])
+			expect(reported(scene).map((issue) => issue.feature)).toEqual([
+				'style.filter glow',
+			])
+		})
+
 		it('each transform function outside the supported set', () => {
 			const scene = paint([
 				sprite('a', {
@@ -353,6 +404,8 @@ describe('Canvas Issues', () => {
 						'transform-origin': 'right 20%',
 						'z-index': 'auto',
 						visibility: 'visible',
+						display: 'block',
+						filter: 'none',
 					},
 				}),
 				sprite('b', {
