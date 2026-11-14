@@ -64,6 +64,26 @@ export interface Controller<CP extends ControllerBaseType> {
 	 * Controllers' with it. The Scene calls this: a game doesn't need to.
 	 */
 	stepFrame: (step: FrameStep) => void
+	/**
+	 * Its Draw Hook, with the Controller's own data filled in, for the Canvas
+	 * Renderer to call. Only there if it was given one.
+	 */
+	draw?: (painting: DrawPainting) => void
+}
+
+/** What the Canvas Renderer hands a Controller's Draw Hook. */
+export interface DrawPainting {
+	/** Already in the Sprite's own box, with its alpha, filter and shadow set. */
+	ctx: CanvasRenderingContext2D
+	/** Paints the current Frame into the box, as the Canvas Renderer would. */
+	drawDefault: () => void
+	$scene: Scene
+}
+
+/** What a Draw Hook is called with. */
+export interface DrawData<T extends ControllerBaseType> extends DrawPainting {
+	$: T
+	$currentFrame: number
 }
 
 interface OnEnterFrameData<T extends ControllerBaseType> {
@@ -92,6 +112,13 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	style?: Sprite['style']
 	onEnterFrame?: (data: OnEnterFrameData<T>) => void
 	onMount?: (data: OnMountData<T>) => void
+	/**
+	 * The Draw Hook: paints the Sprite under the Canvas Renderer in place of
+	 * its current Frame, for what the Canvas Renderer can't draw from style.
+	 * Its Attached Controllers are still painted after it. The DOM Renderer
+	 * never calls it.
+	 */
+	draw?: (data: DrawData<T>) => void
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
@@ -199,6 +226,11 @@ export function createController<CP extends ControllerBaseType>(
 		currentFrame,
 		stepFrame,
 		sprite: () => sprite,
+	}
+	const draw = options.draw
+	if (draw) {
+		controller.draw = (painting) =>
+			draw({ ...painting, $: data, $currentFrame: currentFrame() })
 	}
 	setCarriers.set(controller, setCarrier)
 

@@ -222,7 +222,34 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			-view.y * density,
 		)
 		context.transform(m.a, m.b, m.c, m.d, m.e, m.f)
-		paintCurrentFrame(context, controller)
+		paintSprite(context, controller)
+	}
+
+	/**
+	 * Paints a Controller into its Sprite's box: its current Frame, or
+	 * whatever its Draw Hook paints instead. Its Attached Controllers are
+	 * entries of their own in the draw order, so they're painted after it
+	 * either way.
+	 */
+	const paintSprite = (
+		context: CanvasRenderingContext2D,
+		controller: AnyController,
+	) => {
+		if (!controller.draw) {
+			paintCurrentFrame(context, controller)
+			return
+		}
+		// Whatever the hook leaves set on the context isn't left for the next
+		context.save()
+		try {
+			controller.draw({
+				ctx: context,
+				drawDefault: () => paintCurrentFrame(context, controller),
+				$scene: scene,
+			})
+		} finally {
+			context.restore()
+		}
 	}
 
 	// A repaint at most once a display frame, and only once something has
