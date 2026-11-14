@@ -347,4 +347,42 @@ describe('Canvas Issues', () => {
 			])
 		})
 	})
+
+	describe('for a read of $ref, with onMount still run', () => {
+		it("giving undefined, since there's no element", () => {
+			const refs: unknown[] = []
+			const scene = paint([
+				sprite('a', {
+					type: 'lamp',
+					onMount: ({ $ref }) => refs.push($ref),
+				}),
+			])
+			expect(refs).toEqual([undefined])
+			expect(scene.canvasIssues()).toEqual([
+				expect.objectContaining({ feature: '$ref', type: 'lamp', id: 'a' }),
+			])
+		})
+
+		it("not for an onMount that doesn't read it", () => {
+			const mounted: string[] = []
+			const scene = paint([
+				sprite('a', { onMount: ({ $ }) => mounted.push($.id) }),
+			])
+			expect(mounted).toEqual(['a'])
+			expect(scene.canvasIssues()).toEqual([])
+		})
+
+		it('once for each Controller, attached ones and ones added later too', () => {
+			const mounted: string[] = []
+			const onMount = ({ $ }: { $: ControllerBaseType }) => mounted.push($.id)
+			const carrier = sprite('carrier', { onMount })
+			carrier.attach(sprite('hat', { onMount }))
+			const scene = paint([carrier])
+			vi.advanceTimersByTime(30)
+			frames.run()
+			scene.addController(sprite('late', { onMount }))
+			frames.run()
+			expect(mounted).toEqual(['carrier', 'hat', 'late'])
+		})
+	})
 })

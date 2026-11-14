@@ -303,14 +303,18 @@ export function createController<CP extends ControllerBaseType>(
 		get currentFrame() {
 			return currentFrame()
 		},
-		onMount: ({ $ref }) => {
+		// `$ref` is passed on unread, since under the Canvas Renderer reading
+		// it is a Canvas Issue.
+		onMount: (mounted) => {
 			options.onMount?.({
 				$: data,
 				// biome-ignore lint/style/noNonNullAssertion: set before the sprite mounts
 				$scene: data.scene!,
 				$controller: controller,
 				$currentFrame: currentFrame(),
-				$ref: $ref,
+				get $ref() {
+					return mounted.$ref
+				},
 			})
 		},
 		controllers: childControllers,

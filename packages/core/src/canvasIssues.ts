@@ -128,6 +128,45 @@ function describeIssue(scene: Scene, issue: CanvasIssue) {
 		.join('\n')
 }
 
+/** Reports `feature` for `controller`'s type. */
+function reportIssueOf(
+	scene: Scene,
+	controller: AnyController,
+	feature: string,
+	fix?: string,
+) {
+	reportCanvasIssue(scene, {
+		feature,
+		type: controller.type,
+		id: controller.id,
+		// Only worked out for an issue it hasn't reported already
+		get createdAt() {
+			return createdAt(controller)
+		},
+		fix,
+	})
+}
+
+/**
+ * Runs `controller`'s `onMount`, as the DOM Renderer does when it puts its
+ * Sprite on the page. There's no element under the Canvas Renderer, so
+ * `$ref` is undefined, and reading it is a Canvas Issue: an `onMount` that
+ * doesn't isn't reported.
+ */
+export function mountWithoutElement(scene: Scene, controller: AnyController) {
+	controller.sprite().onMount?.({
+		get $ref() {
+			reportIssueOf(
+				scene,
+				controller,
+				'$ref',
+				"do what onMount does to the element with the Controller's data and a Draw Hook",
+			)
+			return undefined
+		},
+	})
+}
+
 /**
  * Reports whatever `controller` asks for that the Canvas Renderer can't
  * draw, as it's about to be painted.
@@ -138,16 +177,7 @@ export function reportControllerIssues(
 ) {
 	const sprite = controller.sprite()
 	const report = (feature: string, fix?: string) =>
-		reportCanvasIssue(scene, {
-			feature,
-			type: controller.type,
-			id: controller.id,
-			// Only worked out for an issue it hasn't reported already
-			get createdAt() {
-				return createdAt(controller)
-			},
-			fix,
-		})
+		reportIssueOf(scene, controller, feature, fix)
 	if (sprite.class) {
 		report('class', 'move what the class does into style or a Draw Hook')
 	}

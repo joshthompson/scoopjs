@@ -1,7 +1,7 @@
-import { type Accessor, createEffect, createRoot } from 'solid-js'
+import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
 import type { Controller } from './Controller'
 import type { Scene } from './Scene'
-import { reportControllerIssues } from './canvasIssues'
+import { mountWithoutElement, reportControllerIssues } from './canvasIssues'
 import { drawOrder } from './drawOrder'
 import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
@@ -306,6 +306,19 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			camera.x()
 			camera.y()
 			invalidate()
+		})
+		// Each Controller's `onMount`, once it's in the Scene, as the DOM
+		// Renderer runs it once its Sprite's on the page. One taken out and
+		// put back is mounted again, as it would be there.
+		let mounted = new Set<AnyController>()
+		createEffect(() => {
+			const present = new Set(scene.getAllControllers())
+			untrack(() => {
+				for (const controller of present) {
+					if (!mounted.has(controller)) mountWithoutElement(scene, controller)
+				}
+			})
+			mounted = present
 		})
 		// A Frame stepping, which on the `'display'` frame clock happens
 		// between Ticks, and Controllers coming and going
