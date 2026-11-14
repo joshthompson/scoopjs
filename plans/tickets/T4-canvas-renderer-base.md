@@ -1,6 +1,7 @@
 # T4: Canvas Renderer base
 
 Blocked by: T1, T2, T3
+Status: done, merged into canvas-renderer in bcab98e
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 1–30. Implementation Decisions → Canvas Renderer, and the Contracts for draw order, Frame cropping, repainting and the backing store. Testing Decisions → Seam 2.
 

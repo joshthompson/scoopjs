@@ -1,6 +1,7 @@
 # T2: Drawn-box geometry, `hitTest` on drawn boxes and `controllersAt`
 
 Blocked by: none
+Status: done, merged into canvas-renderer in 9ab2f33
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 39–45. Implementation Decisions → Modules → Drawn-box geometry, and Further Notes → transform order. Testing Decisions → Seam 1.
 

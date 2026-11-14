@@ -1,6 +1,7 @@
 # T6: Draw Hook
 
 Blocked by: T4
+Status: done, merged into canvas-renderer in 0d8ac4e
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 55–60. Contracts → Draw Hook, including its type shape.
 

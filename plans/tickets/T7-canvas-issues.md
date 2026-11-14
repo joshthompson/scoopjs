@@ -1,6 +1,7 @@
 # T7: Canvas Issues
 
 Blocked by: T5, T6
+Status: done, merged into canvas-renderer in 3b8e4b3
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 61–73. Implementation Decisions → Issue reporter, and Contracts → Canvas Issue and `$ref`. ADR 0002.
 

@@ -1,6 +1,7 @@
 # T3: Rename `Canvas` to `DomRenderer`
 
 Blocked by: none
+Status: done, merged into canvas-renderer in 215dc8c
 
 Spec: [canvas-spec.md](../canvas-spec.md). User story 3. Implementation Decisions → Modules → DOM Renderer.
 

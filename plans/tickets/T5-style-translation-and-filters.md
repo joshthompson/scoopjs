@@ -1,6 +1,7 @@
 # T5: Style translation and filters
 
 Blocked by: T4
+Status: done, merged into canvas-renderer in cdb0679
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 21–22 and 46–54. Implementation Decisions → Style translator and Filter applier, and Contracts → Translated style keys. ADR 0002.
 

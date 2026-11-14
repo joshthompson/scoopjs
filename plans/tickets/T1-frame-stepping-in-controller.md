@@ -1,6 +1,7 @@
 # T1: Frame stepping moves into the Controller
 
 Blocked by: none
+Status: done, merged into canvas-renderer in 257efb3
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 31–38. Implementation Decisions → Modules → Controller, Scene and DOM Renderer (frame stepping). Testing Decisions → Seam 1.
 

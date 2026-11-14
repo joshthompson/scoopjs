@@ -1,6 +1,7 @@
 # T8: Benchmark stress page and children switch
 
 Blocked by: T4
+Status: done, merged into canvas-renderer in 69018b4
 
 Spec: [canvas-spec.md](../canvas-spec.md). User stories 74–75. [canvas.md](../canvas.md) → Phase 3.
 
