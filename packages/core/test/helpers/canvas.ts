@@ -277,14 +277,17 @@ export interface FakeImage {
  * Images that load when a test says so. Pass `loader` to the painter, then
  * `load(url, width, height, colour?)` to say an image has loaded at that
  * natural size, before or after the painter asks for it. Each is white all
- * over unless a test gives it another colour.
+ * over unless a test gives it another colour. `fail(url)` says one the
+ * painter has asked for failed to load instead.
  */
 export function fakeImages() {
 	const loaded = new Map<string, FakeImage>()
 	const waiting = new Map<string, ((image: FakeImage) => void)[]>()
+	const failing = new Map<string, (() => void)[]>()
 	const requested: string[] = []
-	const loader: ImageLoader = (url, onLoad) => {
+	const loader: ImageLoader = (url, onLoad, onError) => {
 		requested.push(url)
+		if (onError) failing.set(url, [...(failing.get(url) ?? []), onError])
 		const done = (image: FakeImage) =>
 			onLoad({
 				image: image as unknown as CanvasImageSource,
@@ -308,6 +311,12 @@ export function fakeImages() {
 			const image = { src: url, width, height, colour }
 			loaded.set(url, image)
 			for (const done of waiting.get(url) ?? []) done(image)
+			waiting.delete(url)
+		},
+		/** Says an image the painter has asked for failed to load. */
+		fail(url: string) {
+			for (const failed of failing.get(url) ?? []) failed()
+			failing.delete(url)
 			waiting.delete(url)
 		},
 	}

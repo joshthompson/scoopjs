@@ -145,6 +145,20 @@ export function reportSceneIssues(scene: Scene) {
 	}
 }
 
+/** Reports that `url`, which `controller` shows as a Frame, can't be loaded. */
+export function reportMissingImage(
+	scene: Scene,
+	controller: AnyController,
+	url: string,
+) {
+	reportIssueOf(
+		scene,
+		controller,
+		`image ${url}`,
+		"check the image is where the URL says, and what the Scene's resolveAsset gives for it",
+	)
+}
+
 /** Reports `feature` for `controller`'s type. */
 function reportIssueOf(
 	scene: Scene,

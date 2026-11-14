@@ -348,6 +348,19 @@ describe('Canvas Issues', () => {
 		})
 	})
 
+	it('for a Frame whose image fails to load, naming the image', () => {
+		const scene = paint([
+			sprite('a', { type: 'tree', frames: ['missing.png#0,0,10,10'] }),
+		])
+		images.fail('missing.png')
+		expect(reported(scene)).toEqual([
+			{
+				feature: 'image missing.png',
+				fix: "check the image is where the URL says, and what the Scene's resolveAsset gives for it",
+			},
+		])
+	})
+
 	describe("for the Scene's DOM-only options", () => {
 		it('cameraLayer and standbyFrames, as soon as the Canvas Renderer is', () => {
 			paint([], { cameraLayer: true, standbyFrames: true })
