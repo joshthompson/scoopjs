@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
 	type ControllerBaseType,
 	type ControllerProps,
+	createConnectedController,
 	createController,
 } from '../src/Controller'
 import { Scene, type SceneOptions } from '../src/Scene'
@@ -675,6 +676,29 @@ describe('the Canvas Renderer paints', () => {
 			fonts.dispatchEvent(new Event('loadingdone'))
 			frames.run()
 			expect(painted).toBe(2)
+		})
+
+		it('given to an Attached Controller made with createConnectedController', () => {
+			loadAll('kart')
+			const kart = hooked('kart', () => {})
+			let drew = 0
+			const wheel = createConnectedController({
+				type: 'wheel',
+				base: kart,
+				// In the middle of the kart, which is turned on its side
+				offset: { x: 8, y: 3 },
+				width: () => 4,
+				height: () => 4,
+				draw: ({ ctx: hookCtx }) => {
+					drew++
+					hookCtx.fillRect(0, 0, 4, 4)
+				},
+			})
+			kart.attach(wheel)
+			const { ctx } = paint([kart])
+			frames.run()
+			expect(drew).toBe(1)
+			expect(ctx.methods()).toContain('fillRect')
 		})
 
 		it('with its Attached Controllers painted after it, untouched by what it set', () => {

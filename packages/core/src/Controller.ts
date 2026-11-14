@@ -362,6 +362,10 @@ export function createConnectedController<
 	onMount?: ControllerProps<
 		ExtractControllerType<Controller<T & ControllerBaseType>>
 	>['onMount']
+	/** Its Draw Hook, as `createController`'s `draw`. */
+	draw?: ControllerProps<
+		ExtractControllerType<Controller<T & ControllerBaseType>>
+	>['draw']
 	frame?: ($: ExtractControllerType<C>) => number
 	style?: ($: ExtractControllerType<C>) => JSX.CSSProperties
 	randomStartFrame?: boolean
@@ -404,5 +408,6 @@ export function createConnectedController<
 		},
 		onEnterFrame: options.onEnterFrame,
 		onMount: options.onMount,
+		draw: options.draw,
 	})
 }
