@@ -16,14 +16,16 @@ export interface CanvasIssue {
 	/**
 	 * What can't be drawn: `children`, `class`, `inner.style`, a `style` key
 	 * such as `style.clip-path`, a function in one such as
-	 * `style.filter blur`, `$ref`, or one of the Scene's own options such as
-	 * `scene.cameraLayer`.
+	 * `style.filter blur`, `$ref`, `image` for an image that fails to load,
+	 * or one of the Scene's own options such as `scene.cameraLayer`.
 	 */
 	feature: string
 	/** The type of Controller that asks for it, unless the Scene does. */
 	type?: string
 	/** One Controller of that type that asks for it. */
 	id?: string
+	/** The image that failed to load, for an `image` issue. */
+	url?: string
 	/** Where that Controller was created, as a file and line. */
 	createdAt?: string
 	/** How to fix it, where there's a way. */
@@ -125,6 +127,7 @@ function describeIssue(scene: Scene, issue: CanvasIssue) {
 			: `on type "${issue.type}" (id "${issue.id}")`
 	return [
 		`${prefix} unsupported ${issue.feature} ${on}`,
+		issue.url && `  url: ${issue.url}`,
 		issue.createdAt && `  created at ${issue.createdAt}`,
 		issue.fix && `  fix: ${issue.fix}`,
 	]
@@ -149,7 +152,11 @@ export function reportSceneIssues(scene: Scene) {
 	}
 }
 
-/** Reports that `url`, which `controller` shows as a Frame, can't be loaded. */
+/**
+ * Reports that `url`, which `controller` shows as a Frame, can't be loaded:
+ * once for its type, however many of its images can't, since one is enough
+ * to say where to look.
+ */
 export function reportMissingImage(
 	scene: Scene,
 	controller: AnyController,
@@ -158,8 +165,9 @@ export function reportMissingImage(
 	reportIssueOf(
 		scene,
 		controller,
-		`image ${url}`,
+		'image',
 		"check the image is where the URL says, and what the Scene's resolveAsset gives for it",
+		url,
 	)
 }
 
@@ -169,11 +177,13 @@ function reportIssueOf(
 	controller: AnyController,
 	feature: string,
 	fix?: string,
+	url?: string,
 ) {
 	reportCanvasIssue(scene, {
 		feature,
 		type: controller.type,
 		id: controller.id,
+		url,
 		// Only worked out for an issue it hasn't reported already
 		get createdAt() {
 			return createdAt(controller)

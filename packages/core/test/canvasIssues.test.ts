@@ -402,17 +402,54 @@ describe('Canvas Issues', () => {
 		})
 	})
 
-	it('for a Frame whose image fails to load, naming the image', () => {
-		const scene = paint([
-			sprite('a', { type: 'tree', frames: ['missing.png#0,0,10,10'] }),
-		])
-		images.fail('missing.png')
-		expect(reported(scene)).toEqual([
-			{
-				feature: 'image missing.png',
-				fix: "check the image is where the URL says, and what the Scene's resolveAsset gives for it",
-			},
-		])
+	describe('for a Frame whose image fails to load', () => {
+		const fix =
+			"check the image is where the URL says, and what the Scene's resolveAsset gives for it"
+
+		it('as image, with the URL in the record and on the console', () => {
+			const scene = paint([
+				sprite('a', { type: 'tree', frames: ['missing.png#0,0,10,10'] }),
+			])
+			images.fail('missing.png')
+			expect(scene.canvasIssues()).toEqual([
+				{
+					feature: 'image',
+					type: 'tree',
+					id: 'a',
+					url: 'missing.png',
+					createdAt: expect.any(String),
+					fix,
+				},
+			])
+			expect(logged()[0].split('\n')).toEqual([
+				'[scoopjs:canvas] unsupported image on type "tree" (id "a")',
+				'  url: missing.png',
+				expect.stringMatching(/^ {2}created at /),
+				`  fix: ${fix}`,
+			])
+		})
+
+		it('once for each Controller type, however many images fail', () => {
+			const scene = paint([
+				sprite('a', { type: 'tree', frames: ['oak.png', 'elm.png'] }),
+				sprite('b', { type: 'tree', frames: ['elm.png'] }),
+				sprite('c', { type: 'rock', frames: ['elm.png'] }),
+			])
+			images.fail('oak.png')
+			images.fail('elm.png')
+			vi.advanceTimersByTime(10)
+			frames.run()
+			expect(
+				scene.canvasIssues().map(({ feature, type, url }) => ({
+					feature,
+					type,
+					url,
+				})),
+			).toEqual([
+				{ feature: 'image', type: 'tree', url: 'oak.png' },
+				{ feature: 'image', type: 'rock', url: 'elm.png' },
+			])
+		})
 	})
 
 	describe("for the Scene's DOM-only options", () => {
