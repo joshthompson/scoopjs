@@ -265,5 +265,6 @@ Then the two Renderers are benchmarked against each other in run-game. The Canva
 - A survey of the three games on 13 November 2026 shapes these decisions. Details are in [canvas.md](canvas.md).
 - **The real answer comes late.** run-game draws most of its art through `children`, so only the ported course in the benchmark shows whether canvas is worth it.
 - **WebKit filter support.** Canvas `filter` isn't Baseline, and no stable Safari release was found to ship it. Every iPhone browser is WebKit, so the fallback has to be solid.
+- **Draw Hooks under the WebKit fallback.** The fallback recolours each Frame's image, not the context, so on WebKit a Draw Hook's own drawing isn't tinted by the style's colour filters: only what `drawDefault()` paints is. Alpha and `drop-shadow` still apply to everything it draws. This is left as it is, and documented on `draw` and `DrawData`.
 - **Transform order matters.** Translated style transforms must compose in the same order CSS applies them (the engine's scale and rotation, then the style transform, around the origin). Otherwise squashed and skewed sprites will be slightly wrong, and drawn boxes will disagree with what's painted.
 - Canvas Issues are only found by drawing, so finding them all in a game means playing through its levels.

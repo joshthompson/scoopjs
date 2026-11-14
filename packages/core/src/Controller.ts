@@ -74,9 +74,17 @@ export interface Controller<CP extends ControllerBaseType> {
 
 /** What the Canvas Renderer hands a Controller's Draw Hook. */
 export interface DrawPainting {
-	/** Already in the Sprite's own box, with its alpha, filter and shadow set. */
+	/**
+	 * Already in the Sprite's own box, with its alpha, filter and shadow set.
+	 * On WebKit, which has no canvas `filter`, the colour filters aren't set
+	 * on it: only `drawDefault()` is recoloured, and whatever the hook draws
+	 * itself isn't.
+	 */
 	ctx: CanvasRenderingContext2D
-	/** Paints the current Frame into the box, as the Canvas Renderer would. */
+	/**
+	 * Paints the current Frame into the box, as the Canvas Renderer would,
+	 * colour filters and all, on WebKit too.
+	 */
 	drawDefault: () => void
 	$scene: Scene
 }
@@ -117,7 +125,9 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	 * The Draw Hook: paints the Sprite under the Canvas Renderer in place of
 	 * its current Frame, for what the Canvas Renderer can't draw from style.
 	 * Its Attached Controllers are still painted after it. The DOM Renderer
-	 * never calls it.
+	 * never calls it. On WebKit, which has no canvas `filter`, the style's
+	 * colour filters only recolour what `drawDefault()` paints, not what the
+	 * hook draws itself.
 	 */
 	draw?: (data: DrawData<T>) => void
 }
