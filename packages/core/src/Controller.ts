@@ -36,6 +36,10 @@ export type ControllerBaseType = {
 	children?: Accessor<JSX.Element>
 } & Partial<Accessorise<Omit<Sprite, 'inner' | 'children'>>>
 
+/** A Controller of any shape, for code that works with every one. */
+// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
+export type AnyController = Controller<any>
+
 export interface Controller<CP extends ControllerBaseType> {
 	type: string
 	id: string
@@ -43,21 +47,17 @@ export interface Controller<CP extends ControllerBaseType> {
 	solid: SolidRect
 	onEnterFrame: (scene: Scene) => void
 	destroy: () => void
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	hitTest: (other: Controller<any>) => boolean
+	hitTest: (other: AnyController) => boolean
 	distanceTo: (x: number, y: number) => number
 	direction: (x: number, y: number) => number
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	attach: (controller: Controller<any>) => void
+	attach: (controller: AnyController) => void
 	setGame: (scene: Scene) => void
 	data: CP
 	sprite: Accessor<Sprite>
 	age: Accessor<number>
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	childControllers: Accessor<Controller<any>[]>
+	childControllers: Accessor<AnyController[]>
 	/** The Controller this one is attached to, if it's attached to one. */
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	carrier: Accessor<Controller<any> | undefined>
+	carrier: Accessor<AnyController | undefined>
 	/** The Frame its Sprite shows, which is `$currentFrame`. */
 	currentFrame: Accessor<number>
 	/**
@@ -132,9 +132,6 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	draw?: (data: DrawData<T>) => void
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
-
 type ExtractControllerType<T> = T extends Controller<infer A> ? A : never
 
 // How `attach` tells a Controller what's carrying it, without anyone else
@@ -155,10 +152,9 @@ export function createController<CP extends ControllerBaseType>(
 	const creation = new Error().stack
 	const [age, setAge] = createSignal<number>(0)
 	const onEnterFrame = options.onEnterFrame
-	const [childControllers, setChildControllers] = createSignal<
-		// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-		Controller<any>[]
-	>([])
+	const [childControllers, setChildControllers] = createSignal<AnyController[]>(
+		[],
+	)
 	const [carrier, setCarrier] = createSignal<AnyController | undefined>()
 	const data: CP = options.init()
 	const frames = () => data.frames?.() ?? options.frames ?? []
@@ -186,8 +182,7 @@ export function createController<CP extends ControllerBaseType>(
 	// Compares where the two are drawn, worked out from the controllers
 	// themselves rather than from the page, so a scene behaves the same
 	// whatever draws it.
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	const hitTest = (other: Controller<any>) =>
+	const hitTest = (other: AnyController) =>
 		isOverlapping(drawnBox(controller), drawnBox(other))
 	const distanceTo = (x: number, y: number) => {
 		return Math.hypot(data.x() - x, data.y() - y)
@@ -195,8 +190,7 @@ export function createController<CP extends ControllerBaseType>(
 	const direction = (x: number, y: number) => {
 		return Math.atan2(y - data.y(), x - data.x())
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	const attach = (part: Controller<any>) => {
+	const attach = (part: AnyController) => {
 		setChildControllers([...childControllers(), part])
 		setCarriers.get(part)?.(controller)
 	}
@@ -334,8 +328,7 @@ export function createController<CP extends ControllerBaseType>(
 }
 
 export function createConnectedController<
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	C extends Controller<any>,
+	C extends AnyController,
 	T extends {} = ControllerBaseType,
 >(options: {
 	type: string | ((baseType: string) => string)

@@ -1,5 +1,5 @@
 import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import {
 	mountWithoutElement,
@@ -12,9 +12,6 @@ import { createFilterApplier } from './filterApplier'
 import { boxAround, spriteTransform } from './geometry'
 import { canvasStyle } from './styleTranslator'
 import type { Rect } from './types'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /** An image ready to paint, with its natural size. */
 export interface LoadedImage {

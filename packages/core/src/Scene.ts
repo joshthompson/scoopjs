@@ -6,7 +6,7 @@ import {
 	createMemo,
 	createRoot,
 } from 'solid-js'
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
 import { type CanvasIssue, canvasIssuesOf } from './canvasIssues'
 import type { Canvas, CanvasControllers } from './components/DomRenderer'
@@ -22,9 +22,6 @@ export type SceneComponent<T extends {} = any> = Component<
 		mode?: string
 	} & T
 >
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /**
  * Every Controller attached to `carrier`, however deep: a hand on an arm on
@@ -83,8 +80,7 @@ export interface SceneOptions {
 	skipChildren?: boolean
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-export class Scene<C extends Controller<any> = Controller<any>> {
+export class Scene<C extends AnyController = AnyController> {
 	interval: number
 	private animationFrame: number | undefined
 	/** How long a tick is, in milliseconds. */
@@ -221,14 +217,12 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 		return this.lookup().all
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllerById<T = Controller<any>>(id: string) {
+	getControllerById<T = AnyController>(id: string) {
 		return this.lookup().byId.get(id) as T | undefined
 	}
 
 	/** Shared between callers, so don't change the array you get back. */
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllersByType<T = Controller<any>>(type: string) {
+	getControllersByType<T = AnyController>(type: string) {
 		return (this.lookup().byType.get(type) ?? []) as T[]
 	}
 

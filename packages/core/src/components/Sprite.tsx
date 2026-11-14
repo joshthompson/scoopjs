@@ -11,7 +11,7 @@ import {
 	onMount,
 	useContext,
 } from 'solid-js'
-import type { Controller } from '../Controller'
+import type { AnyController } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
 import { childrenToDraw } from '../children'
@@ -55,8 +55,7 @@ export interface Sprite {
 	/** Told each Frame a Sprite steps to itself, without a Controller. */
 	onChangeFrame?: (frameIndex: number) => void
 	onMount?: (data: { $ref: HTMLDivElement | undefined }) => void
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controllers?: Accessor<Controller<any>[]>
+	controllers?: Accessor<AnyController[]>
 }
 
 // One clock for every Sprite without a Controller on `frameClock: 'display'`,
@@ -268,8 +267,7 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
  * reads itself.
  */
 export function ControllerSprite(props: {
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controller: Controller<any>
+	controller: AnyController
 	active?: boolean
 	fixed?: boolean
 }) {

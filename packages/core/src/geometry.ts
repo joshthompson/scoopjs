@@ -1,8 +1,6 @@
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
+import { absent, angle, length } from './cssValues'
 import type { Rect, Vector } from './types'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /**
  * A 2D transform, laid out as `DOMMatrix` and a canvas's `setTransform` take
@@ -55,29 +53,6 @@ const scaling = (x: number, y: number): Matrix => ({ ...identity, a: x, d: y })
 
 function apply(m: Matrix, x: number, y: number) {
 	return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f }
-}
-
-/** A CSS length in pixels, with percentages of `size`. */
-function length(value: string, size: number) {
-	if (value.endsWith('%')) return (Number.parseFloat(value) / 100) * size
-	if (value.endsWith('px')) return Number.parseFloat(value)
-	// Only a bare 0 is a length without a unit
-	return Number(value) === 0 ? 0 : undefined
-}
-
-const turns: Record<string, number> = {
-	deg: 1,
-	rad: 180 / Math.PI,
-	grad: 0.9,
-	turn: 360,
-}
-
-/** A CSS angle in degrees. */
-export function angle(value: string) {
-	const unit = value.match(/[a-z]+$/)?.[0]
-	if (!unit) return Number(value) === 0 ? 0 : undefined
-	const scale = turns[unit]
-	return scale === undefined ? undefined : Number.parseFloat(value) * scale
 }
 
 /**
@@ -225,10 +200,6 @@ function parseTranslate(
 	const y = length(second, height)
 	return x === undefined || y === undefined ? undefined : { x, y }
 }
-
-/** A value that's been left out, as Solid leaves it off the page. */
-const absent = (value: unknown) =>
-	value === undefined || value === null || value === ''
 
 /**
  * The keys of a style that place its Sprite, `translate` and

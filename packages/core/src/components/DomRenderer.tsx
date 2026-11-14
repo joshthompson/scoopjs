@@ -7,7 +7,7 @@ import {
 	onCleanup,
 	onMount,
 } from 'solid-js'
-import type { Controller } from '../Controller'
+import type { AnyController } from '../Controller'
 import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
 import { sortByAssetOrder } from '../drawOrder'
@@ -16,8 +16,7 @@ import { Modal } from './Modal'
 import { ControllerSprite } from './Sprite'
 import { pointerHandlers } from './pointer'
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-export type CanvasControllers = { id: string; controller: Controller<any> }[]
+export type CanvasControllers = { id: string; controller: AnyController }[]
 
 export interface DomRendererProps {
 	ref?: HTMLDivElement | undefined

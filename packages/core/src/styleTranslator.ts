@@ -5,11 +5,9 @@
  * painted, with what it inherits from its carriers.
  */
 import type { JSX } from 'solid-js'
-import type { Controller } from './Controller'
-import { angle, unreadablePlacement, unsupportedTransforms } from './geometry'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
+import type { AnyController } from './Controller'
+import { absent, angle, length } from './cssValues'
+import { unreadablePlacement, unsupportedTransforms } from './geometry'
 
 /**
  * One of the `filter` functions that recolour: `hue-rotate` in degrees, the
@@ -84,10 +82,6 @@ const translatedKeys = new Set([
 	'filter',
 ])
 
-/** A value that's been left out, as Solid leaves it off the page. */
-const absent = (value: unknown) =>
-	value === undefined || value === null || value === ''
-
 /** A CSS number or percentage, or undefined for anything else. */
 function amount(value: unknown) {
 	if (typeof value === 'number') return value
@@ -148,15 +142,6 @@ function colourFilter(name: string, args: string): ColourFilter | undefined {
 	}
 }
 
-/** A length in pixels: only a bare 0 goes without `px`. */
-function pixels(value: string) {
-	if (value.endsWith('px')) {
-		const number = Number(value.slice(0, -2))
-		return Number.isNaN(number) ? undefined : number
-	}
-	return Number(value) === 0 ? 0 : undefined
-}
-
 /**
  * A `drop-shadow`: two lengths for its offset, maybe a third for its blur,
  * and maybe a colour, before them or after. Anything else is undefined.
@@ -167,9 +152,10 @@ function shadow(args: string): Shadow | undefined {
 	const lengths: number[] = []
 	const colours: string[] = []
 	for (const part of parts) {
-		const length = pixels(part)
-		if (length === undefined) colours.push(part)
-		else lengths.push(length)
+		// In pixels only: a percentage of nothing
+		const pixels = length(part)
+		if (pixels === undefined) colours.push(part)
+		else lengths.push(pixels)
 	}
 	if (lengths.length < 2 || lengths.length > 3 || colours.length > 1) {
 		return undefined

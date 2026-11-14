@@ -3,13 +3,11 @@
  * Canvas Renderer, which is the only thing that finds them. The Scene serves
  * them back through `canvasIssues()` without knowing what drew it.
  */
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import { childrenToDraw } from './children'
+import { absent } from './cssValues'
 import { translateStyle } from './styleTranslator'
-
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
 
 /** Something a Controller asks for that the Canvas Renderer can't draw. */
 export interface CanvasIssue {
@@ -294,10 +292,6 @@ function transformFix(name: string) {
 	}
 	return 'use translate, scale, rotate or skew, which are translated'
 }
-
-/** A value that's been left out, as Solid leaves it off the page. */
-const absent = (value: unknown) =>
-	value === undefined || value === null || value === ''
 
 /** Draws it in a Draw Hook: the fix for most of what a canvas can't. */
 const drawHook = 'draw it in a Draw Hook'
