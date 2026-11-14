@@ -57,7 +57,11 @@ function location(frame: string) {
 	if (!line.startsWith('at ')) place = line.slice(line.indexOf('@') + 1)
 	const parts = place.replace(/^\(|\)$/g, '').match(/^(.+):(\d+):\d+$/)
 	if (!parts) return undefined
-	const file = parts[1].replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*/i, '')
+	// A page's file is relative to its origin, and a file on disk keeps its
+	// whole path
+	const file = parts[1]
+		.replace(/^https?:\/\/[^/]*\//i, '')
+		.replace(/^file:\/\//i, '')
 	return { file: file.split('?')[0], line: parts[2] }
 }
 
