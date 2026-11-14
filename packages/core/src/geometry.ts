@@ -255,7 +255,14 @@ export function spriteTransform(controller: AnyController): Matrix {
 /** The axis-aligned box around where a Controller's Sprite is drawn. */
 export function drawnBox(controller: AnyController): Rect {
 	const { width, height } = controller.sprite()
-	const m = spriteTransform(controller)
+	return boxAround(spriteTransform(controller), width, height)
+}
+
+/**
+ * The axis-aligned box around the box (0, 0) to (width, height) moved by
+ * `m`: `drawnBox`, for a caller that has the transform already.
+ */
+export function boxAround(m: Matrix, width: number, height: number): Rect {
 	const corners = [
 		apply(m, 0, 0),
 		apply(m, width, 0),
