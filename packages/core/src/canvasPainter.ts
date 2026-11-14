@@ -1,4 +1,10 @@
-import { type Accessor, createEffect, createRoot, untrack } from 'solid-js'
+import {
+	type Accessor,
+	createEffect,
+	createRoot,
+	onCleanup,
+	untrack,
+} from 'solid-js'
 import type { AnyController } from './Controller'
 import type { Scene } from './Scene'
 import {
@@ -275,6 +281,7 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			controller.draw({
 				ctx: context,
 				drawDefault: () => paintCurrentFrame(context, controller),
+				image: (url) => image(scene.resolveAsset(url), controller),
 				$scene: scene,
 			})
 		} finally {
@@ -342,6 +349,11 @@ export function createCanvasPainter(options: CanvasPainterOptions) {
 			camera.y()
 			invalidate()
 		})
+		// A web font finishing loading, for text a Draw Hook draws in it: till
+		// then, the canvas has drawn it in a fallback font.
+		const fonts = typeof document === 'undefined' ? undefined : document.fonts
+		fonts?.addEventListener('loadingdone', invalidate)
+		onCleanup(() => fonts?.removeEventListener('loadingdone', invalidate))
 		// Each Controller's `onMount`, once it's in the Scene, as the DOM
 		// Renderer runs it once its Sprite's on the page. One taken out and
 		// put back is mounted again, as it would be there.

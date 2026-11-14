@@ -86,7 +86,20 @@ export interface DrawPainting {
 	 * colour filters and all, on WebKit too.
 	 */
 	drawDefault: () => void
+	/**
+	 * An image to draw, through the Scene's Asset Resolver, as a Frame is:
+	 * undefined until it's loaded, when the Canvas Renderer paints again.
+	 * Each is loaded once, and one that can't be is a Canvas Issue.
+	 */
+	image: (url: string) => DrawImage | undefined
 	$scene: Scene
+}
+
+/** An image a Draw Hook can draw, loaded, with its natural size. */
+export interface DrawImage {
+	image: CanvasImageSource
+	width: number
+	height: number
 }
 
 /** What a Draw Hook is called with. */

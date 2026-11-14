@@ -27,6 +27,12 @@ export interface CanvasIssue {
 	url?: string
 	/** Where that Controller was created, as a file and line. */
 	createdAt?: string
+	/**
+	 * What called the code at `createdAt`, nearest first, up to three files and
+	 * lines: for a Controller made by a game's own helper, where the helper's
+	 * called from is the line to change.
+	 */
+	calledFrom?: string[]
 	/** How to fix it, where there's a way. */
 	fix?: string
 }
@@ -72,13 +78,30 @@ function location(frame: string) {
  * in the same file is ScoopJS's own, such as `createConnectedController`.
  * That's one file whether ScoopJS is bundled or not.
  */
-function createdAt(controller: AnyController) {
+function callers(controller: AnyController) {
 	const stack = creations.get(controller)
-	if (!stack) return undefined
+	if (!stack) return []
 	const frames = stack.split('\n').flatMap((frame) => location(frame) ?? [])
 	const own = frames[0]?.file
-	const caller = frames.find((frame) => frame.file !== own)
-	return caller && `${caller.file}:${caller.line}`
+	return frames
+		.filter((frame) => frame.file !== own)
+		.map((frame) => `${frame.file}:${frame.line}`)
+}
+
+function createdAt(controller: AnyController) {
+	return callers(controller)[0]
+}
+
+/**
+ * The next few callers after `createdAt`, in the game's own code: not a
+ * library's, such as Solid's, nor Vite's bundle of them.
+ */
+function calledFrom(controller: AnyController) {
+	const after = callers(controller)
+		.slice(1)
+		.filter((place) => !/node_modules|\.vite\/deps/.test(place))
+		.slice(0, 3)
+	return after.length > 0 ? after : undefined
 }
 
 /** What every Canvas Issue on the console starts with. */
@@ -128,6 +151,7 @@ function describeIssue(scene: Scene, issue: CanvasIssue) {
 		`${prefix} unsupported ${issue.feature} ${on}`,
 		issue.url && `  url: ${issue.url}`,
 		issue.createdAt && `  created at ${issue.createdAt}`,
+		issue.calledFrom && `  called from ${issue.calledFrom.join(', then ')}`,
 		issue.fix && `  fix: ${issue.fix}`,
 	]
 		.filter(Boolean)
@@ -186,6 +210,9 @@ function reportIssueOf(
 		// Only worked out for an issue it hasn't reported already
 		get createdAt() {
 			return createdAt(controller)
+		},
+		get calledFrom() {
+			return calledFrom(controller)
 		},
 		fix,
 	})

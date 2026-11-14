@@ -620,6 +620,44 @@ describe('the Canvas Renderer paints', () => {
 			])
 		})
 
+		it('able to draw an image of its own with image(), painted again once it has loaded', () => {
+			loadAll('badge')
+			const given: unknown[] = []
+			const badge = hooked('badge', ({ ctx: hookCtx, image }) => {
+				const logo = image('logo.png')
+				given.push(logo && { width: logo.width, height: logo.height })
+				if (logo) hookCtx.drawImage(logo.image, 2, 3)
+			})
+			const { ctx } = paint([badge], {
+				resolveAsset: (url) => url.replace('logo', 'winter-logo'),
+			})
+			frames.run()
+			expect(given).toEqual([undefined])
+			expect(images.requested).toContain('winter-logo.png')
+			images.load('winter-logo.png', 6, 4)
+			frames.run()
+			expect(given).toEqual([undefined, { width: 6, height: 4 }])
+			expect(ctx.draws.map((d) => d.image)).toEqual(['winter-logo.png'])
+		})
+
+		it('painted again once a web font has loaded, for text it draws in one', () => {
+			const fonts = new EventTarget()
+			Object.defineProperty(document, 'fonts', {
+				value: fonts,
+				configurable: true,
+			})
+			cleanup.push(() => {
+				Reflect.deleteProperty(document, 'fonts')
+			})
+			let painted = 0
+			paint([hooked('label', () => painted++)])
+			frames.run()
+			expect(painted).toBe(1)
+			fonts.dispatchEvent(new Event('loadingdone'))
+			frames.run()
+			expect(painted).toBe(2)
+		})
+
 		it('with its Attached Controllers painted after it, untouched by what it set', () => {
 			loadAll('rider', 'sun')
 			const kart = hooked('kart', ({ ctx: hookCtx }) => {

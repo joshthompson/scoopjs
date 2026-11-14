@@ -162,6 +162,10 @@ const badge = createController({
   (width, height), with the sprite's alpha, filter and shadow set.
 - `drawDefault()` paints the current frame there, so the hook can draw over
   or under it. `$`, `$scene` and `$currentFrame` are there too.
+- `image(url)` gives an image to draw with `ctx.drawImage`, through the
+  scene's `resolveAsset`: undefined till it's loaded, when the sprite is
+  painted again. Text drawn in a web font is painted again once the font's
+  loaded, too.
 - Whatever it sets on `ctx` is undone after it, and attached controllers
   are still painted after it.
 - On WebKit the colour filters only recolour what `drawDefault()` paints, not
@@ -172,11 +176,13 @@ const badge = createController({
 Whatever a controller asks for that the Canvas Renderer can't draw is a
 Canvas Issue. Each is reported once per controller type and feature, the
 first time it's drawn, with `console.error`, giving an example id, where the
-controller was created and how to fix it:
+controller was created, what called that (for a controller made by a helper
+of the game's own) and how to fix it:
 
 ```
 [scoopjs:canvas] unsupported style.clip-path on type "branch" (id "branch-12")
   created at src/draw/sprites.tsx:27
+  called from src/draw/course.tsx:112
   fix: clip with ctx.clip() in a Draw Hook
 ```
 

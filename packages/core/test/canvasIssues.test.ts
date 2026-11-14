@@ -165,6 +165,7 @@ describe('Canvas Issues', () => {
 				type: 'branch',
 				id: 'branch-12',
 				createdAt: expect.stringMatching(/canvasIssues\.test\.ts:\d+$/),
+				calledFrom: [expect.stringMatching(/canvasIssues\.test\.ts:\d+$/)],
 				fix: expect.any(String),
 			},
 		])
@@ -174,6 +175,7 @@ describe('Canvas Issues', () => {
 			[
 				'[scoopjs:canvas] unsupported style.clip-path on type "branch" (id "branch-12")',
 				`  created at ${issue.createdAt}`,
+				`  called from ${issue.calledFrom?.[0]}`,
 				`  fix: ${issue.fix}`,
 			].join('\n'),
 		])
@@ -196,6 +198,21 @@ describe('Canvas Issues', () => {
 				new RegExp(`test/canvasIssues\\.test\\.ts:${line}$`),
 			)
 			expect(logged()[0].split('\n')[1]).toBe(`  created at ${issue.createdAt}`)
+		})
+
+		it("and what called that, for a game's own helper, leaving out the test runner's code", () => {
+			const leafy = sprite('branch-12', { class: 'leafy' })
+			const [issue] = paint([leafy]).canvasIssues()
+			expect(issue.calledFrom).toEqual([
+				expect.stringMatching(
+					new RegExp(
+						`test/canvasIssues\\.test\\.ts:${lineOf("const leafy = sprite('branch-12'")}$`,
+					),
+				),
+			])
+			expect(logged()[0].split('\n')[2]).toBe(
+				`  called from ${issue.calledFrom?.[0]}`,
+			)
 		})
 
 		it("past ScoopJS's own code, such as createConnectedController", () => {
@@ -471,6 +488,7 @@ describe('Canvas Issues', () => {
 					id: 'a',
 					url: 'missing.png',
 					createdAt: expect.any(String),
+					calledFrom: expect.any(Array),
 					fix,
 				},
 			])
@@ -478,6 +496,7 @@ describe('Canvas Issues', () => {
 				'[scoopjs:canvas] unsupported image on type "tree" (id "a")',
 				'  url: missing.png',
 				expect.stringMatching(/^ {2}created at /),
+				expect.stringMatching(/^ {2}called from /),
 				`  fix: ${fix}`,
 			])
 		})
