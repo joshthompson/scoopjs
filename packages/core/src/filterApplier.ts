@@ -48,6 +48,14 @@ function colourMatrix({ name, amount }: ColourFilter): ColourMatrix {
 				[0.272 - 0.272 * s, 0.534 - 0.534 * s, 0.131 + 0.869 * s],
 			]
 		}
+		case 'grayscale': {
+			const s = 1 - amount
+			return [
+				[0.2126 + 0.7874 * s, 0.7152 - 0.7152 * s, 0.0722 - 0.0722 * s],
+				[0.2126 - 0.2126 * s, 0.7152 + 0.2848 * s, 0.0722 - 0.0722 * s],
+				[0.2126 - 0.2126 * s, 0.7152 - 0.7152 * s, 0.0722 + 0.9278 * s],
+			]
+		}
 		case 'hue-rotate': {
 			const cos = Math.cos((amount * Math.PI) / 180)
 			const sin = Math.sin((amount * Math.PI) / 180)

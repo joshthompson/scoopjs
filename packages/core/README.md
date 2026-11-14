@@ -131,7 +131,7 @@ export const Game = () => <CanvasRenderer scene={scene} pixelated />
 - `z-index`, among sprites and among a carrier's attached controllers.
 - `transform` (the `translate`, `scale`, `rotate` and `skew` functions),
   `translate` and `transform-origin`, in px, % and, for the origin, keywords.
-- `filter` with `hue-rotate`, `brightness`, `sepia` and `saturate`, and one
+- `filter` with `hue-rotate`, `brightness`, `sepia`, `saturate` and `grayscale`, and one
   `drop-shadow`. On WebKit, which has no canvas `filter`, each image is
   recoloured instead.
 - `image-rendering`: `pixelated` and `crisp-edges` turn image smoothing off

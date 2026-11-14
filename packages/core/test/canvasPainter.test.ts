@@ -1256,6 +1256,22 @@ describe('the Canvas Renderer paints', () => {
 				expect([zombie?.filter, zombie?.shadowColor]).toEqual(['none', 'red'])
 			})
 
+			it('with grayscale, wholly or partly, more than 100% being 100%', () => {
+				images.load('grey.png', 10, 10, [200, 100, 50, 255])
+				images.load('half.png', 10, 10, [200, 100, 50, 255])
+				const { ctx } = paint([
+					sprite('grey', { style: { filter: 'grayscale(150%)' } }),
+					sprite('half', { style: { filter: 'grayscale(0.5)' } }),
+				])
+				frames.run()
+				// From the Filter Effects spec's matrix: 0.2126 red, 0.7152
+				// green and 0.0722 blue, all grey at 1, halfway at 0.5
+				expect(ctx.draws.map(({ colour }) => colour)).toEqual([
+					[118, 118, 118, 255],
+					[159, 109, 84, 255],
+				])
+			})
+
 			it('once for each value rounded, to a whole degree for hue and 0.01 for the rest', () => {
 				loadAll('a')
 				const { ctx } = paint([

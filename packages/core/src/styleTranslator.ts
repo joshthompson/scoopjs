@@ -16,6 +16,7 @@ const colourFilterNames = [
 	'brightness',
 	'sepia',
 	'saturate',
+	'grayscale',
 ] as const
 
 /**
@@ -169,8 +170,9 @@ function colourFilter(
 	if (value === undefined || value < 0) return undefined
 	return {
 		name,
-		// More than 100% sepia is 100%, as CSS has it
-		amount: name === 'sepia' ? Math.min(value, 1) : value,
+		// More than 100% sepia or grayscale is 100%, as CSS has it
+		amount:
+			name === 'sepia' || name === 'grayscale' ? Math.min(value, 1) : value,
 	}
 }
 
