@@ -5,7 +5,7 @@ name: Release
 # is merged.
 #
 # Publishes with this repo's own GITHUB_TOKEN, so there's no secret to set
-# up: the first release creates the package. See plan.md, "Publishing".
+# up: the first release creates the package.
 
 on:
   push:
