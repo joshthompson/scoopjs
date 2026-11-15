@@ -136,16 +136,17 @@ type.
 | `base` | Required. The carrier, whose data the others are given. |
 | `type` | Required. A string, or a function of the carrier's type. |
 | `offset` | Required. `{ x, y }`: where it sits on its carrier. |
-| `width`, `height` | Required. Functions giving its size. They're called without the carrier's data, so give a constant: `() => 8`. |
+| `width`, `height` | Required. `($) => number`, from the carrier's data. |
 | `x`, `y` | `($, $age) => number`: added to `offset`, from the carrier's data and age. |
 | `rotation` | `($, $age) => number`, in degrees. |
-| `origin` | `{ x, y }`: what it turns about. Its top-left corner unless given. |
+| `origin` | `{ x, y }`: what it turns and flips about. Its top-left corner unless given. `transformOrigin` is a deprecated name for it. |
+| `xScale` | `($) => number`, from the carrier's data: -1 flips it. |
+| `solid` | As for `createController`. |
 | `frames`, `randomStartFrame` | As for `createController`. |
 | `frame`, `frameInterval`, `state` | Functions of the carrier's data. |
 | `style` | A function of the carrier's data, giving CSS. |
 | `init` | `($, $age) => data`: more data of its own, merged over the rest. |
 | `onEnterFrame`, `onMount`, `draw`, `drawReach` | As for `createController`. |
 
-`xScale`, `transformOrigin` and `solid` are in its options' type but do
-nothing yet. A part's flip can go in its `style`'s `transform`, and only
-Controllers added to the Scene itself can be solid.
+A part's `solid` is kept, but collision only checks Controllers added to
+the Scene itself, so a part blocks nothing while it's attached.

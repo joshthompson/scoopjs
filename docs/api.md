@@ -287,9 +287,9 @@ function createConnectedController<
 ```
 
 Makes a Controller whose data follows `base`'s, to attach to it. `DataOf<C>`
-here stands for the base's data type. `width` and `height` are called
-without the base's data, so give constants. `xScale`, `transformOrigin` and
-`solid` do nothing yet. See [`createConnectedController`](/guide/attached-controllers#createconnectedcontroller).
+here stands for the base's data type. `width`, `height` and `xScale` are
+given the base's data. `transformOrigin` is a deprecated name for `origin`.
+See [`createConnectedController`](/guide/attached-controllers#createconnectedcontroller).
 
 ### Draw Hook types
 
