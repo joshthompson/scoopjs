@@ -2,6 +2,7 @@
 
 A game engine for SolidJS, where Solid components are the game objects.
 Extracted from the [Scoop Bus Run Club](https://scoopbus.run) games.
+Documentation: https://joshthompson.github.io/scoopjs/
 
 | Package | What it is |
 |---|---|
@@ -33,7 +34,7 @@ needs `resolve.dedupe: ['solid-js']`.
 
 Run `pnpm changeset` with any change worth releasing, and commit the file it
 writes. On `main`, the release Action keeps a "Version Packages" PR open, and
-merging that PR publishes to GitHub Packages, for now. See
-[plan.md](plan.md) for how publishing is set up.
+merging that PR publishes to GitHub Packages, for now. See [How releases
+work](https://joshthompson.github.io/scoopjs/versions#how-releases-work).
 
 Words used here: [GLOSSARY.md](GLOSSARY.md).

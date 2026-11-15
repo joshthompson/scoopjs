@@ -15,12 +15,16 @@
 		"bench": "pnpm build && node bench/serve.mjs",
 		"changeset": "changeset",
 		"version-packages": "changeset version",
-		"release": "pnpm build && changeset publish"
+		"release": "pnpm build && changeset publish",
+		"docs:dev": "vitepress dev docs",
+		"docs:build": "vitepress build docs",
+		"docs:preview": "vitepress preview docs"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@changesets/changelog-github": "^1.0.1",
 		"@changesets/cli": "^3.0.3",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"vitepress": "^1.6.4"
 	}
 }

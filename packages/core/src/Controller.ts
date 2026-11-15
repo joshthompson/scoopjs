@@ -380,7 +380,9 @@ export function createConnectedController<
 	base: C
 	frames?: ControllerProps<ExtractControllerType<C>>['frames']
 	offset: Vector
+	/** @deprecated The same as `origin`, which wins if both are given. */
 	transformOrigin?: Vector
+	/** The point it turns and flips about, from its top left: (0, 0) without one. */
 	origin?: Vector
 	solid?: SolidRect
 	width: ($: ExtractControllerType<C>) => number
@@ -412,8 +414,11 @@ export function createConnectedController<
 	return createController<any>({
 		frames: options.frames,
 		randomStartFrame: options.randomStartFrame ?? false,
+		// Read from the options, not the data, as for any Controller
+		solid: options.solid,
 		init() {
 			const baseData = options.base.data as ExtractControllerType<C>
+			const origin = options.origin ?? options.transformOrigin
 
 			return {
 				id: `${options.base.id}-${options.type}`,
@@ -429,16 +434,15 @@ export function createConnectedController<
 					options.offset.y +
 					(options.y ? options.y(baseData, options.base.age()) : 0),
 				rotation: () => options.rotation?.(baseData, options.base.age()) ?? 0,
-				origin: () => ({
-					x: options.origin?.x ?? 0,
-					y: options.origin?.y ?? 0,
-				}),
+				xScale: () => options.xScale?.(baseData) ?? 1,
+				origin: () => ({ x: origin?.x ?? 0, y: origin?.y ?? 0 }),
 				frame: () => options.frame?.(baseData),
 				frameInterval: () => options.frameInterval?.(baseData),
 				state: () => options.state?.(baseData),
-				width: options.width,
-				height: options.height,
-				solid: options.solid,
+				// Given the base's data, which a Sprite's own width and height
+				// aren't
+				width: () => options.width(baseData),
+				height: () => options.height(baseData),
 				style: () => options.style?.(baseData),
 				...options.init?.(baseData, options.base.age()),
 			}

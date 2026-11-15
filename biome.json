@@ -4,6 +4,7 @@
 		"ignore": [
 			"**/dist/**",
 			"**/node_modules/**",
+			"docs/.vitepress/cache/**",
 			".changeset/*.md",
 			".claude/**"
 		]
