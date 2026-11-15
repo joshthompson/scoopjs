@@ -1,0 +1,55 @@
+name: Docs
+
+# Builds the documentation site with VitePress and publishes it to GitHub
+# Pages, at https://joshthompson.github.io/scoopjs/. Runs when the docs or
+# Core change, since the site includes Core's changelog and shows its
+# version, when GLOSSARY.md changes, since the Glossary page includes it, or
+# by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - GLOSSARY.md
+      - packages/core/**
+      - .github/workflows/docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. A newer one waits rather than cancelling one
+# that's already publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm docs:build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
