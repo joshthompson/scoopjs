@@ -7,19 +7,26 @@ import {
 	batch,
 	createEffect,
 	createMemo,
-	createSignal,
 	onCleanup,
 	onMount,
 	useContext,
 } from 'solid-js'
-import type { Controller } from '../Controller'
+import type { AnyController } from '../Controller'
+import type { Scene } from '../Scene'
 import { SceneContext } from '../SceneContext'
+import { childrenToDraw } from '../children'
+import { createFrameStepper, frameInterval, parseFrame } from '../frames'
 import type { Vector } from '../types'
 
 export interface Sprite {
 	ref?: HTMLDivElement | undefined
 	frames: string[]
 	frame?: number
+	/**
+	 * The Frame to show, from whatever steps it: a Controller does. Without
+	 * one the Sprite steps through its Frames itself.
+	 */
+	currentFrame?: number
 	randomStartFrame?: boolean
 	x: number
 	y: number
@@ -45,14 +52,15 @@ export interface Sprite {
 	 */
 	children?: JSX.Element | (() => JSX.Element)
 	onClick?: () => void
+	/** Told each Frame a Sprite steps to itself, without a Controller. */
 	onChangeFrame?: (frameIndex: number) => void
 	onMount?: (data: { $ref: HTMLDivElement | undefined }) => void
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controllers?: Accessor<Controller<any>[]>
+	controllers?: Accessor<AnyController[]>
 }
 
-// One clock for every sprite on `frameClock: 'display'`, rather than a timer
-// each, so frame changes are written together just before the browser paints.
+// One clock for every Sprite without a Controller on `frameClock: 'display'`,
+// rather than a timer each, so Frame changes are written together just before
+// the browser paints. A Scene steps its Controllers' Frames on its own.
 const animations = new Set<(now: number) => void>()
 let animationFrame: number | undefined
 
@@ -71,6 +79,35 @@ function addAnimation(animate: (now: number) => void) {
 	return () => animations.delete(animate)
 }
 
+/**
+ * The Frames of a Sprite used without a Controller, stepped on the scene's
+ * frame clock as a Controller's are.
+ */
+function createFallbackStepper(
+	props: Sprite & SpriteExtendedProps,
+	scene: Scene,
+) {
+	const { currentFrame, step } = createFrameStepper({
+		frameCount: () => props.frames.length,
+		frameInterval: () => frameInterval(props.frameInterval),
+		playing: () => props.state === 'play',
+		frame: () => props.frame,
+		randomStartFrame: props.randomStartFrame,
+	})
+	const paused = () => props.active === false
+	if (scene.options.frameClock === 'display') {
+		onCleanup(addAnimation((now) => step({ now, paused: paused() })))
+	} else {
+		const tick = () => step({ elapsed: scene.frameRate, paused: paused() })
+		scene.tickers.add(tick)
+		onCleanup(() => scene.tickers.delete(tick))
+	}
+	if (props.onChangeFrame) {
+		createEffect(() => props.onChangeFrame?.(currentFrame()))
+	}
+	return currentFrame
+}
+
 interface SpriteExtendedProps {
 	active?: boolean
 	id?: string
@@ -84,28 +121,20 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 
 	let ref: HTMLDivElement | undefined
 
-	const [currentFrame, setCurrentFrame] = createSignal(
-		props.randomStartFrame
-			? Math.floor(Math.random() * props.frames.length)
-			: 0,
-	)
-	createEffect(() => props.onChangeFrame?.(currentFrame()))
-	createEffect(
-		() => typeof props.frame === 'number' && setCurrentFrame(props.frame),
-	)
+	// A Controller steps its own Frames. Without one, the Sprite does.
+	const currentFrame =
+		props.currentFrame === undefined
+			? createFallbackStepper(props, scene)
+			: () => props.currentFrame ?? 0
 	const frames = createMemo(() =>
 		props.frames.map((frame) => {
-			// Every sprite goes through here, so this is where a game's
-			// `resolveAsset` swaps in whichever image it wants shown.
-			const image = scene.resolveAsset(frame.split('#')[0])
-			const [left, top, width, height] = frame
-				.split('#')[1]
-				?.split(',')
-				.map(Number) ?? [0, 0, 0, 0]
+			const { url, x, y, width, height } = parseFrame(frame)
 			return {
-				image,
-				left,
-				top,
+				// Every sprite goes through here, so this is where a game's
+				// `resolveAsset` swaps in whichever image it wants shown.
+				image: scene.resolveAsset(url),
+				left: x,
+				top: y,
 				width,
 				height,
 			}
@@ -131,56 +160,10 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
 		}
 	})
 
-	const frameInterval = () =>
-		typeof props.frameInterval === 'function'
-			? props.frameInterval()
-			: (props.frameInterval ?? 100)
-	const canAnimate = () =>
-		props.active !== false && props.state === 'play' && !!props.frames.length
-
-	if (scene.options.frameClock === 'display') {
-		// On the screen's refresh, a step as soon as it mounts, and then one
-		// whenever a frame is due. Each step is timed from when the frame was
-		// due, so intervals don't round up to the display's own rate.
-		const step = () => {
-			if (canAnimate()) {
-				setCurrentFrame((prev) => (prev + 1) % props.frames.length)
-			}
-		}
-		step()
-		let nextFrameAt = performance.now() + frameInterval()
-		onCleanup(
-			addAnimation((now) => {
-				if (now < nextFrameAt) return
-				step()
-				nextFrameAt = Math.max(nextFrameAt + frameInterval(), now)
-			}),
-		)
-	} else {
-		// Stepped through on the scene's tick, so a sprite changes frame in the
-		// same update as it moves. The time a frame's been showing carries over
-		// from tick to tick, so a frame interval that isn't a whole number of
-		// ticks still comes out right on average.
-		let shown = 0
-		const animate = () => {
-			if (!canAnimate()) return
-			const interval = frameInterval()
-			// An infinite interval is a sprite that never changes frame, like the
-			// scenery.
-			if (!Number.isFinite(interval) || interval <= 0) return
-			shown += scene.frameRate
-			const steps = Math.floor(shown / interval)
-			if (!steps) return
-			shown -= steps * interval
-			setCurrentFrame((prev) => (prev + steps) % props.frames.length)
-		}
-		scene.tickers.add(animate)
-		onCleanup(() => scene.tickers.delete(animate))
-	}
-
 	// The same children from one move to the next, so they're only drawn again
 	// when they're swapped for others, or when a function's signals change.
-	const children = createMemo(() => props.children)
+	// None at all with the Scene's `skipChildren` bench switch on.
+	const children = createMemo(() => childrenToDraw(scene, props))
 	const content = () => {
 		const drawn = children()
 		return typeof drawn === 'function' ? drawn() : drawn
@@ -277,8 +260,7 @@ export const Sprite: Component<Sprite & SpriteExtendedProps> = (props) => {
  * reads itself.
  */
 export function ControllerSprite(props: {
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	controller: Controller<any>
+	controller: AnyController
 	active?: boolean
 	fixed?: boolean
 }) {

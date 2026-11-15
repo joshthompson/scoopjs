@@ -6,10 +6,15 @@ import {
 	createMemo,
 	createRoot,
 } from 'solid-js'
-import type { Controller } from './Controller'
+import type { AnyController } from './Controller'
 import { type ObjectSignal, createObjectSignal } from './ObjectSignal'
-import type { Canvas, CanvasControllers } from './components/Canvas'
-import type { Rect } from './types'
+import { type CanvasIssue, canvasIssuesOf } from './canvasIssues'
+import type { Canvas, CanvasControllers } from './components/DomRenderer'
+import { drawOrder } from './drawOrder'
+import { parseFrame } from './frames'
+import { drawnBox } from './geometry'
+import { effectiveStyle } from './styleTranslator'
+import type { Rect, Vector } from './types'
 
 // biome-ignore lint/suspicious/noExplicitAny: a scene's props are the game's own
 export type SceneComponent<T extends {} = any> = Component<
@@ -19,8 +24,13 @@ export type SceneComponent<T extends {} = any> = Component<
 	} & T
 >
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-type AnyController = Controller<any>
+/**
+ * Every Controller attached to `carrier`, however deep: a hand on an arm on
+ * a runner is the runner's part too. Each straight after what carries it.
+ */
+function partsOf(carrier: AnyController): AnyController[] {
+	return carrier.childControllers().flatMap((part) => [part, ...partsOf(part)])
+}
 
 export interface SceneOptions {
 	width: number
@@ -54,23 +64,33 @@ export interface SceneOptions {
 	 */
 	standbyFrames?: boolean
 	/**
-	 * What sprites step through their frames on. `'tick'` (the default) is the
-	 * scene's tick, so a sprite changes frame in the same update as it moves.
-	 * `'display'` is the screen's own refresh, timed to the millisecond, for
-	 * frame intervals that aren't a whole number of ticks.
+	 * What Controllers step through their Frames on. `'tick'` (the default) is
+	 * the scene's tick, so a sprite changes frame in the same update as it
+	 * moves. `'display'` is the screen's own refresh, timed to the
+	 * millisecond, for frame intervals that aren't a whole number of ticks.
+	 * Either way the Scene steps them, whichever Renderer draws it.
 	 */
 	frameClock?: 'tick' | 'display'
+	/**
+	 * For benchmarking only: draws no Sprite's `children`, under either
+	 * Renderer, and the Canvas Renderer doesn't report them. The two Renderers
+	 * then draw the same Frames and nothing else, so comparing them compares
+	 * how fast each draws, not how much. Not for shipping a game with. Off by
+	 * default.
+	 */
+	skipChildren?: boolean
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-export class Scene<C extends Controller<any> = Controller<any>> {
+export class Scene<C extends AnyController = AnyController> {
 	interval: number
+	private animationFrame: number | undefined
 	/** How long a tick is, in milliseconds. */
 	frameRate: number
 	/**
-	 * Run every tick after the controllers have moved, which is how sprites
-	 * step through their frames: in the same update as everything else, rather
-	 * than each on a clock of its own.
+	 * Run every tick after the controllers have moved and their Frames have
+	 * stepped, even while paused: in the same update as everything else,
+	 * rather than each on a clock of its own. A Sprite used without a
+	 * Controller steps its Frames on one.
 	 */
 	tickers = new Set<() => void>()
 	/**
@@ -85,7 +105,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 	}>
 	private disposeLookup: () => void
 	loading = createObjectSignal(false)
-	/** Whether any of the scene is on the screen (see `Canvas`). */
+	/** Whether any of the scene is on the screen, as its Renderer sees it. */
 	visible = createObjectSignal(true)
 	modal = createObjectSignal(undefined as JSX.Element | undefined)
 	loadingAssetCount = createObjectSignal(0)
@@ -102,8 +122,8 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 		const lookup = createRoot((dispose) => ({
 			dispose,
 			memo: createMemo(() => {
-				const top = this.controllers.get().map((c) => c.controller)
-				const all = [...top, ...top.flatMap((c) => c.childControllers())]
+				const top = this.controllers.get().map(({ controller }) => controller)
+				const all = [...top, ...top.flatMap(partsOf)]
 				const byId = new Map<string, AnyController>()
 				const byType = new Map<string, AnyController[]>()
 				for (const controller of all) {
@@ -128,9 +148,18 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			() =>
 				this.visible.get() &&
 				batch(() => {
-					if (this.isActive()) {
+					const paused = !this.isActive()
+					if (!paused) {
 						for (const { controller } of this.controllers.get()) {
 							controller.onEnterFrame(this)
+						}
+					}
+					// Frames step after everything's moved, so a Sprite changes
+					// Frame in the same update as it moves. Paused, they don't move
+					// on, but still jump to a `frame` a game sets.
+					if (this.options.frameClock !== 'display') {
+						for (const { controller } of this.controllers.get()) {
+							controller.stepFrame({ elapsed: this.frameRate, paused })
 						}
 					}
 					for (const ticker of this.tickers) ticker()
@@ -138,6 +167,23 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 				}),
 			this.frameRate,
 		)
+
+		// On the `'display'` frame clock, Frames step on the screen's refresh
+		// instead, all together just before the browser paints.
+		if (this.options.frameClock === 'display') {
+			const refresh = (now: number) => {
+				if (this.visible.get()) {
+					const paused = !this.isActive()
+					batch(() => {
+						for (const { controller } of this.controllers.get()) {
+							controller.stepFrame({ now, paused })
+						}
+					})
+				}
+				this.animationFrame = requestAnimationFrame(refresh)
+			}
+			this.animationFrame = requestAnimationFrame(refresh)
+		}
 
 		// Run setup
 		this.setup()
@@ -172,15 +218,44 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 		return this.lookup().all
 	}
 
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllerById<T = Controller<any>>(id: string) {
+	getControllerById<T = AnyController>(id: string) {
 		return this.lookup().byId.get(id) as T | undefined
 	}
 
 	/** Shared between callers, so don't change the array you get back. */
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	getControllersByType<T = Controller<any>>(type: string) {
+	getControllersByType<T = AnyController>(type: string) {
 		return (this.lookup().byType.get(type) ?? []) as T[]
+	}
+
+	/**
+	 * The Pointer Pick: the Controllers drawn over `point`, topmost first,
+	 * whichever Renderer draws them. Those hidden by their style, or by a carrier's, aren't
+	 * drawn, so they're left out. `point` is in the scene's coordinates, as
+	 * the Renderers' `onClick`, `onMouseDown` and `onMouseUp` give it.
+	 */
+	controllersAt(point: Vector): C[] {
+		return drawOrder(this)
+			.filter((controller) => {
+				if (effectiveStyle(controller).hidden) return false
+				const box = drawnBox(controller)
+				return (
+					point.x >= box.x &&
+					point.x <= box.x + box.width &&
+					point.y >= box.y &&
+					point.y <= box.y + box.height
+				)
+			})
+			.reverse() as C[]
+	}
+
+	/**
+	 * Every Canvas Issue so far: what the Canvas Renderer has been asked to
+	 * draw and can't, once per Controller type and feature, as plain records
+	 * that can go straight to JSON. The same as it logs with `console.error`.
+	 * Empty under the DOM Renderer, which draws everything.
+	 */
+	canvasIssues(): CanvasIssue[] {
+		return canvasIssuesOf(this)
 	}
 
 	getSolidControllerRects(): Rect[] {
@@ -213,6 +288,9 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 
 	destroy() {
 		clearInterval(this.interval)
+		if (this.animationFrame !== undefined) {
+			cancelAnimationFrame(this.animationFrame)
+		}
 		this.tickers.clear()
 		this.disposeLookup()
 	}
@@ -251,7 +329,7 @@ export class Scene<C extends Controller<any> = Controller<any>> {
 			.get()
 			.flatMap(({ controller }) => controller.frames ?? [])
 			// Preload whichever variant Sprite will actually render
-			.map((frame) => this.resolveAsset(frame.split('#')[0]))
+			.map((frame) => this.resolveAsset(parseFrame(frame).url))
 
 		const imageAssets = [
 			...new Set([...frameAssets, ...(this.options.images ?? [])]),

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>ScoopJS stress page</title>
+		<!-- Core as built, and the one copy of Solid it was built against -->
+		<script type="importmap">
+			{
+				"imports": {
+					"scoopjs": "/packages/core/dist/index.js",
+					"solid-js": "/packages/core/node_modules/solid-js/dist/solid.js",
+					"solid-js/web": "/packages/core/node_modules/solid-js/web/dist/web.js"
+				}
+			}
+		</script>
+		<style>
+			body {
+				margin: 16px;
+				font: 14px/1.4 system-ui, sans-serif;
+				background: #f4f4f4;
+				color: #222;
+			}
+			form {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px 20px;
+				align-items: center;
+				margin-bottom: 12px;
+			}
+			#stats {
+				font-variant-numeric: tabular-nums;
+				margin-bottom: 12px;
+				min-height: 1.4em;
+			}
+			#stage {
+				max-width: 100%;
+				overflow: auto;
+			}
+		</style>
+	</head>
+	<body>
+		<form id="controls">
+			<label>
+				Sprites
+				<select name="count">
+					<option>100</option>
+					<option selected>500</option>
+					<option>1000</option>
+					<option>2000</option>
+					<option>3000</option>
+					<option>5000</option>
+				</select>
+			</label>
+			<fieldset style="border: 0; padding: 0; margin: 0; display: flex; gap: 12px">
+				<label><input type="radio" name="renderer" value="dom" checked /> DOM Renderer</label>
+				<label><input type="radio" name="renderer" value="canvas" /> Canvas Renderer</label>
+			</fieldset>
+			<label><input type="checkbox" name="skipChildren" /> skipChildren</label>
+		</form>
+		<div id="stats">Starting…</div>
+		<div id="stage"></div>
+		<script type="module" src="./stress.js"></script>
+	</body>
+</html>

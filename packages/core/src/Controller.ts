@@ -1,11 +1,14 @@
 import { type Accessor, type JSX, type Setter, createSignal } from 'solid-js'
 import type { Scene } from './Scene'
+import { recordCreation } from './canvasIssues'
 import {
 	type SolidRect,
 	blockBySolidsRectPlayer,
 	isOverlapping,
 } from './collision'
 import type { Sprite } from './components/Sprite'
+import { type FrameStep, createFrameStepper, frameInterval } from './frames'
+import { drawnBox } from './geometry'
 import type { Vector } from './types'
 
 type Accessorise<T> = {
@@ -33,6 +36,10 @@ export type ControllerBaseType = {
 	children?: Accessor<JSX.Element>
 } & Partial<Accessorise<Omit<Sprite, 'inner' | 'children'>>>
 
+/** A Controller of any shape, for code that works with every one. */
+// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
+export type AnyController = Controller<any>
+
 export interface Controller<CP extends ControllerBaseType> {
 	type: string
 	id: string
@@ -40,18 +47,88 @@ export interface Controller<CP extends ControllerBaseType> {
 	solid: SolidRect
 	onEnterFrame: (scene: Scene) => void
 	destroy: () => void
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	hitTest: (other: Controller<any>) => boolean
+	hitTest: (other: AnyController) => boolean
 	distanceTo: (x: number, y: number) => number
 	direction: (x: number, y: number) => number
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	attach: (controller: Controller<any>) => void
+	attach: (controller: AnyController) => void
 	setGame: (scene: Scene) => void
 	data: CP
 	sprite: Accessor<Sprite>
 	age: Accessor<number>
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	childControllers: Accessor<Controller<any>[]>
+	childControllers: Accessor<AnyController[]>
+	/** The Controller this one is attached to, if it's attached to one. */
+	carrier: Accessor<AnyController | undefined>
+	/** The Frame its Sprite shows, which is `$currentFrame`. */
+	currentFrame: Accessor<number>
+	/**
+	 * Moves its Frame on by one step of a frame clock, and its Attached
+	 * Controllers' with it. The Scene calls this: a game doesn't need to.
+	 */
+	stepFrame: (step: FrameStep) => void
+	/**
+	 * Its Draw Hook, with the Controller's own data filled in, for the Canvas
+	 * Renderer to call. Only there if it was given one.
+	 */
+	draw?: (painting: DrawPainting) => void
+	/** How far its Draw Hook paints past its box, side by side: see `drawReach`. */
+	drawReach?: Reach
+}
+
+/** How far each side of a Sprite's box a Draw Hook paints past it. */
+export interface Reach {
+	left: number
+	top: number
+	right: number
+	bottom: number
+}
+
+/** A `drawReach` as a game gives it: one number for every side, or some sides'. */
+export type DrawReach = number | Partial<Reach>
+
+const reachOf = (reach: DrawReach): Reach =>
+	typeof reach === 'number'
+		? { left: reach, top: reach, right: reach, bottom: reach }
+		: {
+				left: reach.left ?? 0,
+				top: reach.top ?? 0,
+				right: reach.right ?? 0,
+				bottom: reach.bottom ?? 0,
+			}
+
+/** What the Canvas Renderer hands a Controller's Draw Hook. */
+export interface DrawPainting {
+	/**
+	 * Already in the Sprite's own box, with its alpha, filter and shadow set.
+	 * On WebKit, which has no canvas `filter`, the colour filters aren't set
+	 * on it: only `drawDefault()` is recoloured, and whatever the hook draws
+	 * itself isn't.
+	 */
+	ctx: CanvasRenderingContext2D
+	/**
+	 * Paints the current Frame into the box, as the Canvas Renderer would,
+	 * colour filters and all, on WebKit too.
+	 */
+	drawDefault: () => void
+	/**
+	 * An image to draw, through the Scene's Asset Resolver, as a Frame is:
+	 * undefined until it's loaded, when the Canvas Renderer paints again.
+	 * Each is loaded once, and one that can't be is a Canvas Issue.
+	 */
+	image: (url: string) => DrawImage | undefined
+	$scene: Scene
+}
+
+/** An image a Draw Hook can draw, loaded, with its natural size. */
+export interface DrawImage {
+	image: CanvasImageSource
+	width: number
+	height: number
+}
+
+/** What a Draw Hook is called with. */
+export interface DrawData<T extends ControllerBaseType> extends DrawPainting {
+	$: T
+	$currentFrame: number
 }
 
 interface OnEnterFrameData<T extends ControllerBaseType> {
@@ -80,9 +157,34 @@ export interface ControllerProps<T extends ControllerBaseType> {
 	style?: Sprite['style']
 	onEnterFrame?: (data: OnEnterFrameData<T>) => void
 	onMount?: (data: OnMountData<T>) => void
+	/**
+	 * The Draw Hook: paints the Sprite under the Canvas Renderer in place of
+	 * its current Frame, for what the Canvas Renderer can't draw from style.
+	 * Its Attached Controllers are still painted after it. The DOM Renderer
+	 * never calls it. On WebKit, which has no canvas `filter`, the style's
+	 * colour filters only recolour what `drawDefault()` paints, not what the
+	 * hook draws itself.
+	 */
+	draw?: (data: DrawData<T>) => void
+	/**
+	 * How far its Draw Hook paints past its Sprite's box, in the Sprite's own
+	 * pixels, so turning with it: one number for every side, or some sides'.
+	 * The Canvas Renderer skips a Controller the camera can't see, so art
+	 * that reaches well past its box would vanish near the screen's edges.
+	 * With this it's painted while any of what it reaches is in view. Only
+	 * for painting: what it collides with is still its box.
+	 */
+	drawReach?: DrawReach
 }
 
 type ExtractControllerType<T> = T extends Controller<infer A> ? A : never
+
+// How `attach` tells a Controller what's carrying it, without anyone else
+// being able to.
+const setCarriers = new WeakMap<
+	AnyController,
+	Setter<AnyController | undefined>
+>()
 
 const joinClasses = (...classes: (string | undefined)[]) =>
 	classes.filter(Boolean).join(' ')
@@ -90,40 +192,49 @@ const joinClasses = (...classes: (string | undefined)[]) =>
 export function createController<CP extends ControllerBaseType>(
 	options: ControllerProps<CP>,
 ): Controller<CP> {
+	// Where it was created, for a Canvas Issue to say. Only kept as a string
+	// here, and read only if the Controller turns out to have one.
+	const creation = new Error().stack
 	const [age, setAge] = createSignal<number>(0)
 	const onEnterFrame = options.onEnterFrame
-	const [currentFrame, setCurrentFrame] = createSignal<number>(0)
-	const [childControllers, setChildControllers] = createSignal<
-		// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-		Controller<any>[]
-	>([])
+	const [childControllers, setChildControllers] = createSignal<AnyController[]>(
+		[],
+	)
+	const [carrier, setCarrier] = createSignal<AnyController | undefined>()
 	const data: CP = options.init()
+	const frames = () => data.frames?.() ?? options.frames ?? []
+	// Stepped here rather than by whatever draws the Sprite, so the Frame is
+	// the same whichever Renderer draws it, and `$currentFrame` is exactly
+	// the Frame on screen.
+	const { currentFrame, step: stepOwnFrame } = createFrameStepper({
+		frameCount: () => frames().length,
+		frameInterval: () => frameInterval(data.frameInterval?.()),
+		playing: () => data.state?.() === 'play',
+		frame: () => data.frame?.(),
+		randomStartFrame: options.randomStartFrame,
+	})
+	const stepFrame = (step: FrameStep) => {
+		stepOwnFrame(step)
+		for (const part of childControllers()) part.stepFrame(step)
+	}
 	const destroy = () => {}
 	const setGame = (scene: Scene) => {
 		data.scene = scene
 	}
-	// Worked out from the controllers' own positions and sizes, never from the
-	// page, so a scene behaves the same whatever draws it.
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	const hitTest = (other: Controller<any>) =>
-		isOverlapping(
-			{ x: data.x(), y: data.y(), width: data.width(), height: data.height() },
-			{
-				x: other.data.x(),
-				y: other.data.y(),
-				width: other.data.width(),
-				height: other.data.height(),
-			},
-		)
+	// Compares where the two are drawn, worked out from the controllers
+	// themselves rather than from the page, so a scene behaves the same
+	// whatever draws it.
+	const hitTest = (other: AnyController) =>
+		isOverlapping(drawnBox(controller), drawnBox(other))
 	const distanceTo = (x: number, y: number) => {
 		return Math.hypot(data.x() - x, data.y() - y)
 	}
 	const direction = (x: number, y: number) => {
 		return Math.atan2(y - data.y(), x - data.x())
 	}
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	const attach = (controller: Controller<any>) => {
-		setChildControllers([...childControllers(), controller])
+	const attach = (part: AnyController) => {
+		setChildControllers([...childControllers(), part])
+		setCarriers.get(part)?.(controller)
 	}
 
 	const controller: Controller<CP> = {
@@ -148,8 +259,8 @@ export function createController<CP extends ControllerBaseType>(
 			}
 			setAge(age() + 1)
 
-			for (const child of childControllers()) {
-				child.onEnterFrame($scene)
+			for (const part of childControllers()) {
+				part.onEnterFrame($scene)
 			}
 		},
 		destroy,
@@ -161,8 +272,21 @@ export function createController<CP extends ControllerBaseType>(
 		age,
 		data,
 		childControllers,
+		carrier,
+		currentFrame,
+		stepFrame,
 		sprite: () => sprite,
 	}
+	const draw = options.draw
+	if (draw) {
+		controller.draw = (painting) =>
+			draw({ ...painting, $: data, $currentFrame: currentFrame() })
+	}
+	if (options.drawReach !== undefined) {
+		controller.drawReach = reachOf(options.drawReach)
+	}
+	setCarriers.set(controller, setCarrier)
+	recordCreation(controller, creation)
 
 	// One sprite for the controller's whole life, each of its values worked out
 	// when it's read. A sprite then only redoes the parts that read whatever
@@ -170,7 +294,7 @@ export function createController<CP extends ControllerBaseType>(
 	// or their name.
 	const sprite: Sprite = {
 		get frames() {
-			return data?.frames?.() ?? options.frames ?? []
+			return frames()
 		},
 		get frame() {
 			return data?.frame?.()
@@ -225,15 +349,21 @@ export function createController<CP extends ControllerBaseType>(
 				style: data.inner?.style?.(),
 			}
 		},
-		onChangeFrame: (frame) => setCurrentFrame(frame),
-		onMount: ({ $ref }) => {
+		get currentFrame() {
+			return currentFrame()
+		},
+		// `$ref` is passed on unread, since under the Canvas Renderer reading
+		// it is a Canvas Issue.
+		onMount: (mounted) => {
 			options.onMount?.({
 				$: data,
 				// biome-ignore lint/style/noNonNullAssertion: set before the sprite mounts
 				$scene: data.scene!,
 				$controller: controller,
 				$currentFrame: currentFrame(),
-				$ref: $ref,
+				get $ref() {
+					return mounted.$ref
+				},
 			})
 		},
 		controllers: childControllers,
@@ -243,8 +373,7 @@ export function createController<CP extends ControllerBaseType>(
 }
 
 export function createConnectedController<
-	// biome-ignore lint/suspicious/noExplicitAny: controllers of any shape
-	C extends Controller<any>,
+	C extends AnyController,
 	T extends {} = ControllerBaseType,
 >(options: {
 	type: string | ((baseType: string) => string)
@@ -268,6 +397,12 @@ export function createConnectedController<
 	onMount?: ControllerProps<
 		ExtractControllerType<Controller<T & ControllerBaseType>>
 	>['onMount']
+	/** Its Draw Hook, as `createController`'s `draw`. */
+	draw?: ControllerProps<
+		ExtractControllerType<Controller<T & ControllerBaseType>>
+	>['draw']
+	/** How far its Draw Hook paints past its box, as `createController`'s `drawReach`. */
+	drawReach?: DrawReach
 	frame?: ($: ExtractControllerType<C>) => number
 	style?: ($: ExtractControllerType<C>) => JSX.CSSProperties
 	randomStartFrame?: boolean
@@ -310,5 +445,7 @@ export function createConnectedController<
 		},
 		onEnterFrame: options.onEnterFrame,
 		onMount: options.onMount,
+		draw: options.draw,
+		drawReach: options.drawReach,
 	})
 }

@@ -1,2 +1,3 @@
-export * from './Canvas'
+export * from './DomRenderer'
+export * from './CanvasRenderer'
 export * from './Sprite'

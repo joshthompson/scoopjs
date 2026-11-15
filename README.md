@@ -5,7 +5,12 @@ Extracted from the [Scoop Bus Run Club](https://scoopbus.run) games.
 
 | Package | What it is |
 |---|---|
-| [`@joshthompson/scoopjs`](packages/core) | Core: Scene, Controller, Sprite, Canvas and collision |
+| [`@joshthompson/scoopjs`](packages/core) | Core: Scene, Controller, Sprite, the Renderers and collision |
+
+A game draws its Scene with either Renderer, and switches by mounting the
+other: the DOM Renderer, which draws each Sprite as page elements, or the
+Canvas Renderer, which paints them all onto one `<canvas>`. See [Choosing a
+Renderer](packages/core/README.md#choosing-a-renderer).
 
 Optional extras will be plugin packages next to it (see
 [docs/adr/0001](docs/adr/0001-plugins-are-composition.md)).
